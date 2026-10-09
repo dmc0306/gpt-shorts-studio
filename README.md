@@ -1,0 +1,123 @@
+# Shorts Studio — Android MVP 0.1
+
+15초 내외 영상을 수집함에서 선택하고, 템플릿·제목·상황 자막을 적용해 MP4로 저장하는 Flutter 앱의 첫 구현입니다.
+
+**상태: 소스 구현 / APK 빌드·실기기 검증 전.** 이 파일 묶음은 설치 APK가 아닙니다. 작성 환경에 Flutter·Android SDK 및 브라우저 실행 파일이 없고 SDK 다운로드가 차단되어, Flutter 분석·테스트·컴파일과 네이티브 출력 품질을 확인하지 못했습니다.
+
+## 이번 버전에 들어간 것
+
+| 기능 | 구현 범위 |
+|---|---|
+| 공유로 수집 | Android 공유 메뉴의 텍스트(TikTok URL)·영상 파일 받기 |
+| TikTok 정보 | 공식 oEmbed로 제목·제작자 조회 시도. 실패하면 링크를 유지 |
+| 자동 수집 | 사용자가 선택한 기기 폴더의 새 영상, 앱이 실행 중일 때 15초 간격 검사 및 재진입 시 검사 |
+| 영상 가져오기 | 시스템 파일 선택기, 앱 전용 공간에 복사, 썸네일 생성 |
+| 자동 편집 | 영상 클릭 시 기본 템플릿 적용. 제목은 파일명으로 초기화 |
+| 편집 | 미니멀/볼드/블루 3종, 제목·상황 자막, 구간 자르기, 중앙 채우기 또는 원본 맞춤, 음소거 |
+| 저장 | Media3로 1080×1920 H.264/AAC MP4 합성, 갤러리 Movies/ShortsStudio에 저장 |
+| 프로젝트 | 앱 전용 JSON 원자적 교체 저장. 공유 수집함은 확인 응답 후 제거 |
+| 출력 UX | 실제 렌더링 진행률(제공되지 않으면 미정 진행), 취소, 오류, 저장 완료 알림 |
+
+**아직 구현하지 않은 핵심 범위:** TikTok 전체 영상 자동 검색·원본 자동 다운로드. 폴더 수집은 이미 기기에 확보한 파일을 대상으로 하며 TikTok 수집 서비스와 다릅니다. TikTok API 계정 인증도 연결하지 않았습니다. 일반 공개 영상 자동 수집을 완료했다고 해석하면 안 됩니다.
+
+외부 AI API, 온디바이스 AI 분석, 대사 인식, 자동 상황 이해, YouTube 업로드, iOS 영상 엔진, 앱 종료 중 백그라운드 수집은 포함하지 않았습니다.
+
+## 실행
+
+필요 환경: Flutter 3.44 이상 stable (Dart 3.12 이상), Android Studio/SDK, JDK 17, Python 3, Android 10(API 29) 이상 기기. 패키지 다운로드를 위한 인터넷이 필요합니다.
+
+압축을 풀고 `shorts_studio` 디렉터리에서:
+
+```bash
+python tool/bootstrap.py
+flutter analyze
+flutter test
+flutter run
+```
+
+Windows에서 `python` 명령이 없으면 `py tool/bootstrap.py`를 사용합니다. `tool/bootstrap.py`는 Flutter SDK 버전에 맞는 Android 뼈대를 생성하고 네이티브 코드·매니페스트·의존성을 설치합니다. Gradle/Kotlin 플러그인 설정은 설치된 Flutter의 기본값을 유지합니다.
+
+APK 만들기:
+
+```bash
+flutter build apk --debug
+```
+
+결과: `build/app/outputs/flutter-apk/app-debug.apk`. 개발용 디버그 빌드이며 앱스토어 출시 서명은 포함하지 않습니다.
+
+GitHub 저장소의 루트에 이 폴더 **내용**을 올리면 `.github/workflows/android.yml`로 테스트와 APK 빌드를 실행할 수 있습니다. 코드는 저장소에 업로드하지 않았으며 워크플로도 실행되지 않았습니다. Actions 완료 후 `shorts-studio-debug-apk` 아티팩트에서 APK를 받습니다.
+
+## 사용 순서
+
+1. `샘플 영상으로 시작` 또는 `영상 가져오기`.
+2. 자동 수집을 쓰려면 우측 상단 설정 → 수집 폴더 선택. Android 정책상 루트 Download 등을 선택할 수 없으면 별도 하위 폴더를 만듭니다.
+3. TikTok에서 공유 → Shorts Studio를 선택하면 링크가 수집함에 추가됩니다. 앱 목록에서 보이지 않으면 링크 복사 → 앱의 `링크 추가`를 사용합니다.
+4. 링크 카드에 원본이 없으면 파일을 한 번 연결합니다. 링크만으로 영상 파일을 내려받지는 않습니다.
+5. 영상 카드 탭 → 기본 템플릿 적용 → 제목·자막·구간 확인 → `MP4로 저장`.
+6. 갤러리의 Movies/ShortsStudio에서 결과 확인. 저장함 카드로 편집을 다시 열 수 있습니다.
+
+저장 중에는 앱을 켜두세요. OS가 앱을 종료하면 작업을 다시 시작해야 합니다. 강제 종료 중인 작업의 이어서 렌더링은 미지원입니다.
+
+## 디자인
+
+사용자가 제공한 See for Yourself 디자인 토큰을 적용했습니다.
+
+- 흰색 #FFFFFF, 검정 #101010/#000000, 파랑 #0099FF.
+- 회색 #C6C6C6, 절제된 구분선, 8px 중심 간격.
+- 큰 얇은 헤드라인, 둥근 카드, 알약형 버튼.
+- 수집함 → 편집 → 갤러리 저장, 업로드 탭 없음.
+- Inter Display/PP Neue Montreal 폰트 바이너리·라이선스가 제공되지 않아 시스템 sans-serif를 사용합니다. 원본 폰트를 무단 번들하지 않았습니다.
+
+`design/preview.html`은 두 화면을 비교하는 **별도 HTML 디자인 미리보기**입니다. 브라우저에서 열면 템플릿·제목·자막·영상 재생·기기 파일 미리보기를 조작할 수 있습니다. Flutter를 실행한 캡처가 아니며 이 HTML은 실제 MP4 저장을 하지 않습니다. 버튼은 그 한계를 안내합니다. 샘플 영상은 코드로 직접 만든 15초 모션 그래픽이고 TikTok 영상이 아닙니다.
+
+## 코드 지도
+
+- `lib/main.dart`: 수집함, 저장함, 공유 수집함 병합, 폴더 검사, 상태 관리
+- `lib/editor.dart`: 플레이어, 템플릿, 공통 자막 오버레이, 편집·저장 UX
+- `lib/theme.dart`: 디자인 토큰
+- `lib/model.dart`: 프로젝트 데이터와 TikTok URL 검증
+- `lib/bridge.dart`: Flutter ↔ Android 통신
+- `native/android/MainActivity.kt`: SAF 파일·폴더, 메타데이터, 공유, Media3, MediaStore
+- `tool/bootstrap.py`: Flutter 플랫폼 생성·네이티브 설치
+- `.github/workflows/android.yml`: 분석·테스트·디버그 APK 빌드
+
+미리보기 자막 레이어를 PNG로 캡처하여 동일한 레이어를 Media3에 전달합니다. OS별 텍스트 재조판 차이를 줄이기 위한 구조이며, 실제 정합도는 기기 테스트가 필요합니다. 출력은 원본을 유지하는 fit이 기본값입니다. crop을 켜면 중앙 기준으로 화면을 채우므로 가장자리가 잘립니다. 자막은 전체 편집 구간 동안 표시됩니다. 별도의 자막 타이밍·발화 트랙은 아직 없습니다.
+
+## 한계와 실기기 확인 항목
+
+- Android만 연결되어 있습니다. Flutter UI를 공유하더라도 iOS는 별도 Swift 구현이 필요합니다.
+- 0.2초~120초, 최대 512MB 입력을 처리합니다. 주요 목표는 5~30초 MP4입니다.
+- 폴더는 한 단계만 검사합니다. SAF 권한이 취소되면 다시 선택해야 합니다.
+- 기본 15초 간격은 스케줄 목표이며 폴더 IO 시간·OS 중단에 따라 늦어집니다.
+- 새 파일의 이름/URI/크기/수정시각으로 중복을 줄입니다. 같은 영상의 별도 복사본까지 해시로 제거하지 않습니다.
+- 무음 원본에 AAC 트랙을 새로 만들지는 않습니다.
+- HDR·회전 메타데이터·저장 공간 부족·저사양 인코더는 아직 검증되지 않았습니다.
+- 앱 삭제 시 원본 사본·프로젝트 정보는 삭제됩니다. 갤러리에 내보낸 영상은 별개입니다.
+- 원본 영상·음악의 이용 범위는 사용자가 확인합니다. 현재 버전은 권리 증빙 DB와 발행 기능이 없습니다.
+
+### 빌드 후 필수 확인
+
+1. 세로 H.264 15초 영상: 제목·자막이 미리보기와 저장본에 동일하게 나타나는지.
+2. 가로 영상: fit은 전체 보존, crop은 중앙 잘림이 일치하는지.
+3. 구간 2~8초: 저장본 길이가 약 6초인지, 음소거를 켜면 오디오가 없는지.
+4. 한글·긴 제목·빈 제목·세 템플릿을 확인.
+5. 앱 종료 후 프로젝트 복원, 콜드/웜 공유 인텐트, 동일 URL 중복 처리.
+6. 폴더 파일 추가 → 수집 → 다시 스캔해도 중복 생성되지 않는지.
+7. 저장 취소·공간 부족·인코더 오류 때 성공으로 표시하지 않는지.
+8. 저사양 실기기에서 1080p 출력·온도·메모리·발열 확인.
+
+## 검증 기록
+
+작성 환경에서 수행: Dart 파일 구분자 균형 점검, Python 문법 점검, Android XML 구문 점검, 샘플 파일 ffprobe 확인(H.264, 360×640, 24fps, 15초), HTML JavaScript 구문 확인.
+
+수행하지 못함: `flutter analyze`, `flutter test`, Gradle/Kotlin 빌드, APK 설치, Flutter UI 렌더링, Android MP4 내보내기, 브라우저 실제 렌더링. 정적 구문 확인만으로 빌드나 실행 성공을 보장하지 않습니다.
+
+## 확인한 공식 문서
+
+- TikTok Display API: https://developers.tiktok.com/docs/en/display-api-overview
+- TikTok oEmbed: https://developers.tiktok.com/docs/en/embed-videos
+- Media3 Transformer: https://developer.android.com/media/media3/transformer/getting-started
+- Media3 BitmapOverlay: https://developer.android.com/reference/androidx/media3/effect/BitmapOverlay
+- Media3 Presentation: https://developer.android.com/reference/androidx/media3/effect/Presentation
+- Flutter video_player: https://pub.dev/packages/video_player/versions/2.14.1
+- Android video player changelog: https://pub.dev/packages/video_player_android/changelog
