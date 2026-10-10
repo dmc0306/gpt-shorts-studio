@@ -1,3 +1,15 @@
+## 0.6.0 — 무료 검색 분리·공통 AI 설정
+
+- 자동 제작 검색을 Gemini 2.5에서 Tavily Search로 교체했습니다. 신규 프로젝트의 2.5 접근 제한을 피하면서 생성과 검색의 공급자/키를 분리합니다.
+- 자동 제작 화면 상단 설정 버튼 및 본문의 AI 설정 버튼을 추가했습니다. 편집 화면도 같은 설정창을 사용합니다. Tavily 검색 키, Gemini 생성 키, 생성 모델을 함께 저장하며 키는 Android Keystore AES-GCM으로 각각 암호화합니다. 비워서 저장하면 해당 키만 삭제합니다.
+- 신규 기본 생성 모델은 gemini-3.5-flash-lite입니다. 기존 저장 모델은 보존하며 설정창의 추천 모델로 변경 버튼으로 바꿀 수 있습니다.
+- Tavily Researcher 무료 요금제는 월 1,000크레딧·카드 불필요입니다. basic 검색/auto_parameters=false로 주제별 1회, 실행당 최대 3회 검색하며 자동 재시도·유료 검색 대체는 하지 않습니다. 계정에서 종량제/유료 결제를 켜지 마세요. 계정의 다른 사용량과 정책에 따라 무료 잔여량이 달라집니다.
+- 검색 응답 results의 실제 TikTok 개별 영상 URL만 사용하고 프로필·discover·생성된 본문 링크는 제외합니다. 최대 12개 후보·중복 제외·실제 영상 AI 평가·5개 저장 목표를 유지합니다. 검색 결과/다운로드 성공은 보장하지 않습니다.
+- 검색 오류는 Tavily와 상태 코드, 생성 모델 오류는 Gemini와 모델 이름을 구분해 표시합니다. API 키/원문 응답은 오류나 프로젝트에 기록하지 않습니다.
+- URL 결과 필터·기본 검색 옵션·설정창 저장 및 닫기 동작 회귀 테스트를 추가했습니다. 실제 사용자 키로 API 호출 및 실기기 제작 검증은 별도입니다.
+
+공식 문서: https://docs.tavily.com/documentation/api-credits · https://docs.tavily.com/documentation/api-reference/endpoint/search
+
 ## 0.5.1 — 자동 탐색 빌드 오류 수정
 
 - GitHub Actions #13의 분석 오류 8개를 수정했습니다. 리다이렉트 반복문에서 nullable Uri를 재할당하던 코드를 명시적인 non-null Uri로 변경했습니다.
