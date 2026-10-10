@@ -39,3 +39,5 @@ CI results and device behavior must be reported separately. Passing CI does not 
 - 0.8.0 실기기에서 여러 영상이 일반 AI 처리 오류로 실패했다. 실제 응답 원문/종료 사유가 없어 원인은 확정할 수 없다. 네트워크로 단정하지 않는다.
 - 응답 구문·타입·빈 출력·MAX_TOKENS를 구분하고 단계별 안전 코드로 표시한다. 일시적 AI 실패 후보는 영속 대기에 보존하되 같은 실행에서 무한 재시도하지 않는다. 내부 CLIENT 오류는 비용 낭비를 막기 위해 전체 중단한다.
 - 일반 검증 절약 선호에도 제보한 실패 경로는 실제 스키마 구성/응답 파싱 회귀 테스트를 포함한다.
+
+- 후속 CI #19에서 실제 원인 재현: schema required의 List<String>에 raw List.addAll을 호출하면서 인수가 List<dynamic>으로 생성되어 Iterable<String> 타입 오류. 문자열 목록에 원소 하나씩 add하는 0.7은 통과했지만 addAll로 바꾼 0.8부터 발생했다. (schema['required'] as List<String>).addAll(<String>[...])로 고정한다. JSON 스키마 실제 구성과 jsonEncode까지 테스트해야 이 회귀를 잡을 수 있다.
