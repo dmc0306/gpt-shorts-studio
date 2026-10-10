@@ -1,3 +1,10 @@
+## 0.9.1 — GitHub Secrets 고정 APK 서명
+
+- 등록된 ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD를 연결합니다. 키는 runner 임시 폴더에 권한 0600으로 복원하고, 비밀번호는 해당 빌드 단계의 환경변수로만 전달합니다. 소스·ZIP·APK 아티팩트에 키 파일이나 비밀번호를 넣지 않습니다.
+- bootstrap이 Gradle에 공통 studio signingConfig를 추가하여 debug/release 모두 지정한 키를 사용합니다. CI APK는 기존 debug 형식을 유지하며 고정 키로 서명합니다. signing path가 없는 로컬 개발 빌드는 기존 Flutter 동작을 유지합니다. CI에서는 Secret 누락·잘못된 base64·비밀번호·별칭·서명 불일치를 빌드 실패로 처리하며 임시 debug 키로 대체하지 않습니다.
+- apksigner가 APK 서명을 검증하고, keystore에서 추출한 공개 인증서의 SHA-256과 APK 인증서 SHA-256이 동일한지 검사한 뒤 APK를 업로드합니다. 종료 시 임시 keystore와 공개 인증서를 삭제합니다.
+- 버전 0.9.1+20. 앞으로 같은 키와 증가하는 build number를 유지합니다. 기존 임시 debug 키로 설치한 앱과는 인증서가 다르므로 최초 전환 시 삭제 후 설치가 필요할 수 있습니다. 앱 삭제 전 내부 원본·프로젝트·API 설정을 보관하세요. 실제 업데이트 설치는 기기에서 확인해야 합니다.
+
 ## 0.9.0 — 길이 사전 검사·오류 복구·즉시 재생·통합 설정
 
 - 혼합 제작은 페이지의 요청 영상 ID에 연결된 duration을 먼저 검사합니다. 5~30초 밖이면 미디어 요청·파일 저장·AI 업로드 없이 제외합니다. 길이 정보가 없거나 유효하지 않으면 다운로드 후 실제 길이로 검사합니다. 파일 길이 재검사는 유지합니다.

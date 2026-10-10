@@ -49,3 +49,9 @@ CI results and device behavior must be reported separately. Passing CI does not 
 - HTTP400/metadata는 동일 공개 페이지 1회 재확인만 허용. 인증/다운로드 금지/403/429를 우회하거나 서버가 제공하지 않은 주소를 만들지 않음. 지속 오류는 다음 후보로 진행.
 - 혼합 결과에 앱 내 원본/저장본 재생·편집, 상태 요약·필터·접는 진단, 모든 설정을 공통 앱 설정으로 통합.
 - 사용자 고정 서명 설정 완료 보고와 별개로, 저장소 공개 workflow의 최종 수정은 2026-10-09로 확인됨. 이번 변경에서 workflow/Secrets/키 파일은 수정하거나 읽지 않음. 고정 서명 연결 확인 없이 업데이트 설치 성공을 보장하지 말 것.
+
+## 2026-10-10 — 0.9.1 고정 서명 연결
+- 사용자 요청으로 ANDROID_KEYSTORE_BASE64를 실제 CI 서명에 연결. Settings에서 Secret 이름 4개가 등록되었음을 확인했으며 값은 읽거나 변경하지 않았음.
+- 복원은 runner temp 0600, 비밀번호는 환경변수. bootstrap Gradle studio signing을 debug/release에 연결. CI 서명 누락 시 임시 debug 키로 성공 처리하지 않음.
+- APK 업로드 전에 apksigner 검증과 키의 공개 인증서 SHA-256 비교. 빌드 이후 키 삭제. ZIP에서 jks/keystore/key.properties 및 빌드 결과 제외.
+- 첫 고정 키 APK는 기존 CI 임시 debug 인증서와 다를 수 있어 최초 삭제/재설치가 필요. 이후 같은 키와 증가한 버전 번호 유지. 키/비밀번호/개인 인증서 DN을 메모리나 로그에 기록하지 않음.
