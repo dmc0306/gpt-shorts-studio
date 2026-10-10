@@ -67,3 +67,6 @@ CI results and device behavior must be reported separately. Passing CI does not 
 - CI 서명 도구 사람이 읽는 출력 형식 문제는 certificate PEM→DER 해시 비교로 변경. 검증 통과 전 아티팩트 공개하지 않음. 실제 CI 완료 상태는 실행 로그로 확인.
 
 - Dart 조건식에서 `edge?.25:.45`는 null-aware 연산자로 해석된다. 소수 리터럴 앞 삼항 연산자는 `edge ? .25 : .45`처럼 공백을 명시. CI #24 분석에서 발견하여 수정. OCR 회귀 테스트가 해당 정책을 import하여 컴파일을 검증.
+
+## 2026-10-11 — 0.9.3 사용자 제약
+- 자막은 위/아래 검정 여백 금지. 내부 위치만 선택하고 자동 배치에서 안전한 위치가 없으면 숨김. 기존 outside도 내부 재배치/숨김. 사용량 2% 요청: 검증 실행 및 CI 결과 대기 생략.
