@@ -55,3 +55,5 @@ CI results and device behavior must be reported separately. Passing CI does not 
 - 복원은 runner temp 0600, 비밀번호는 환경변수. bootstrap Gradle studio signing을 debug/release에 연결. CI 서명 누락 시 임시 debug 키로 성공 처리하지 않음.
 - APK 업로드 전에 apksigner 검증과 키의 공개 인증서 SHA-256 비교. 빌드 이후 키 삭제. ZIP에서 jks/keystore/key.properties 및 빌드 결과 제외.
 - 첫 고정 키 APK는 기존 CI 임시 debug 인증서와 다를 수 있어 최초 삭제/재설치가 필요. 이후 같은 키와 증가한 버전 번호 유지. 키/비밀번호/개인 인증서 DN을 메모리나 로그에 기록하지 않음.
+
+- 서명 검사 회귀: apksigner v3.1은 `Signer (minSdkVersion=..., maxSdkVersion=...)`로 표시한다. 번호 형식만 파싱하면 올바른 서명도 실패한다. 두 형식의 인증서 SHA-256을 모두 읽고, 모든 고유 서명 인증서가 지정 키와 같을 때만 통과. source stamp/public key는 제외. 형식·중복 범위·다른 키·다중 서명·누락 테스트 추가.
