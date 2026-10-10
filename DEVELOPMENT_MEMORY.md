@@ -73,3 +73,6 @@ CI results and device behavior must be reported separately. Passing CI does not 
 
 ## 2026-10-11 — 0.9.4 자막 미표시 수정
 - 0.9.3에서 좌표 누락/보수적인 합집합 bbox가 모든 내부 후보와 충돌하면 자막을 숨겨 미표시 발생. 좌표 누락은 내부 하단, 충돌 시 후보 중 최소 겹침 비율 위치로 표시. 피사체 회피는 최선 노력이며 완전 회피 보장 불가. AI 프롬프트에서도 자막 생략 지시 제거. 검정 여백 금지 유지, 검증 생략 요청 유지.
+
+## 2026-10-11 — CI #27 압축 구조 실패
+- ZIP에 shorts_studio/ 접두어를 잘못 추가해 app/tool/signing.py가 없어 서명 키 복원 단계 실패. workflow는 unzip -d app 후 app에서 실행하므로 ZIP 파일 이름은 프로젝트 기준 상대 경로로 저장해야 함. pubspec.yaml, tool/signing.py, tool/bootstrap.py, lib/main.dart 최상위 존재를 매번 패킹 후 assert.
