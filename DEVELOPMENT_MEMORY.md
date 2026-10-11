@@ -1,3 +1,7 @@
+## 0.10.3 — 화면 스크롤 회귀 테스트 수정
+
+- CI #32는 분석 통과 후 화면 테스트 2건 실패: 전환율 패널 아래 버튼이 ListView에서 아직 생성되지 않아 ensureVisible/finder가 실패했습니다. scrollUntilVisible로 실제 스크롤 후 재개·연속 재생·필터·저장본 버튼을 확인합니다. 전환율 중복 제거/단계 집계/빈 결과 회귀 테스트도 추가했습니다. APK 빌드 전에 실패한 테스트를 건너뛰지 않고 전체 CI를 재검증합니다.
+
 # Development memory
 
 ## Working rules — 2026-10-10
