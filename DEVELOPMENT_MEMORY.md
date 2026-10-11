@@ -76,3 +76,9 @@ CI results and device behavior must be reported separately. Passing CI does not 
 
 ## 2026-10-11 — CI #27 압축 구조 실패
 - ZIP에 shorts_studio/ 접두어를 잘못 추가해 app/tool/signing.py가 없어 서명 키 복원 단계 실패. workflow는 unzip -d app 후 app에서 실행하므로 ZIP 파일 이름은 프로젝트 기준 상대 경로로 저장해야 함. pubspec.yaml, tool/signing.py, tool/bootstrap.py, lib/main.dart 최상위 존재를 매번 패킹 후 assert.
+
+## 2026-10-11 — 0.10.0 개선 범위
+- 사용자: 개선 1/2/4/5 적용, 3(피사체 회피용 글씨 축소·문구 단축)은 제외. 기존 44px·영상 내부 후보 배치 그대로.
+- 평가를 계정/검색어 순위에 반영. 연속 재생과 평가, 부정 평가 완성본 교체(원본 MP4 삭제 없음), 남은 결과 보존하고 총 5개 채우기.
+- OCR/승인된 AI 단계 체크포인트는 배치 보고서와 함께 로컬 저장. clip ID/원본 경로/크기/수정시각/길이/모델로 무효화. 다운로드 일시 오류 및 렌더 오류는 대기 유지. 파일 삭제 시 다시 다운로드. 강제 종료 자동 실행은 아님, 버튼으로 재개.
+- 자막은 행동 변화·반전 선공개 금지·같은 의미 반복 금지 프롬프트 강화. 추가 AI 호출 없이 적용. 실제 타이밍 정확도 보장 아님.
