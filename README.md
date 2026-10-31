@@ -1,3 +1,19 @@
+## 0.16.0 - 휴대폰 Chrome에서 채널 인증
+
+앱의 **Chrome에서 채널 연결 · 브랜드 계정** 버튼으로 휴대폰 브라우저에서 인증할 수 있습니다. PC 중계 도구는 웹 OAuth 코드 교환과 토큰 갱신만 담당하며 영상 제작·업로드는 휴대폰에서 계속합니다. 최초 설정과 실행 방법은 [YOUTUBE_BROWSER_AUTH.md](YOUTUBE_BROWSER_AUTH.md)를 확인하세요. PC와 ADB 연결이 필요합니다. 브라우저 데스크톱 사이트 모드만으로 원하는 브랜드 채널 선택이 보장되지는 않습니다.
+
+## 0.15.2 - Distinguish empty and ambiguous channel responses
+
+Empty channel results, multiple channels and malformed responses now have separate diagnostics. An empty nextPageToken no longer rejects a valid single channel. Store only result kind/count/total/pagination metadata for troubleshooting, never tokens or raw API responses. An empty authorized channel result does not mean the user has no channel; check actual ownership and Brand Account authorization. Local tests: 89 passed; analysis and APK build passed.
+
+## 0.15.1 - Reset previous Google grant when switching channels
+
+The channel-change button now clears cached access tokens, revokes the old grant and signs in again. A failed revocation cannot silently reuse the previous channel. A changed authorized channel disables automatic upload until reconfirmed. Google default-channel changes still need a new authorization and real-device confirmation.
+
+## 0.15.0 - YouTube integration on the complete 0.14.0 app
+
+TikTok discovery/download, categories, AI captions, crop OCR, feedback and resume are retained. New private YouTube uploads run after manual or automatic MP4 saves. Channel identity and audience settings must be confirmed first; failures preserve saved videos. See [YOUTUBE_INTEGRATION.md](YOUTUBE_INTEGRATION.md) for setup, signing certificate requirements and validation.
+
 ## 0.14.0 — 최종 크롭·구간 자막 검사 / 검색 카테고리
 
 - 자동 제작은 AI가 사용 구간을 선택한 뒤 그 시간 안의 중앙 정사각형 이미지를 실제로 잘라 기기 OCR을 실행합니다. 잘려 사라지는 상하/좌우 글자와 구간 밖 글자는 제외 사유가 아닙니다. 남는 글자 조각은 경계 검사로 보완합니다. AI의 sourceText/edited 판단 지침도 같은 표시 영역·시간 기준으로 맞춥니다. 간판/워터마크 구별, 기타 편집·AI 의심 기준은 유지합니다. OCR은 최대 16개 샘플 프레임 검사여서 짧은 자막을 놓치거나 현장 글자를 오인할 수 있습니다.

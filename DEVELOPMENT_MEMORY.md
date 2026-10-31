@@ -178,3 +178,34 @@ CI results and device behavior must be reported separately. Passing CI does not 
 ## 2026-10-11 — 0.10.2 전환율·계정 탐색
 - 요청 두 가지: 단계별 전환율 및 좋은 평가 계정 중심 탐색. URL 영상 ID 중복 제거, 현재 보고서+대기 후보 분모, 단계 검사 bool 영속 저장. 기존 MP4 저장 결과는 모든 단계 통과로 집계. 대기는 실패가 아님.
 - 주제별 괜찮음 평가·긍정 비율>0.5 계정 선택. 평가/저장률 순위, 주제별 2회 타깃 후 1회 일반 검색. 계정핸들 정규식 검증 후 site 필터 검색. 전체 검색/API 한도 증대 없음. 계정 전체 목록 수집이나 인기 보장 아님.
+
+
+## 2026-10-31: preserve the 0.14 source when integrating YouTube
+
+- Local shorts_studio was the initial 0.1.0 scaffold. Using it as the integration base omitted existing TikTok/AI/batch features. Base changes on the repository source ZIP 0.14.0+40 instead, preserve all model fields and existing discovery/download logic, and bump to 0.15.0+41.
+- Keep YouTube errors separate from render success. Regression: the fifth MP4 and saved-count=5 survive a failed Google connection; retain the original candidate checkpoints and reports.
+- Persist resumable sessions by saved URI and bind them to email and channel ID. Query channels.list mine=true and reject a changed target before sending bytes. youtube.readonly is required in addition to youtube.upload.
+- Windows sandbox builds use workspace SDK/cache copies, in-process Kotlin, JDK 21, and FLUTTER_SUPPRESS_ANALYTICS=true. Restart the workspace Gradle daemon after switching Android SDK roots to avoid stale absolute SDK paths.
+- Local validation: Flutter tests 83 passed, upload protocol scenarios 9 passed, APK build passed. Live Google/TikTok/YouTube network behavior is not covered by mocks.
+
+
+## 2026-10-31: Google channel-change authorization and session policy
+
+- Re-authenticating without disconnect reused the previous Google authorization. Reconnect now clears the old token, calls disconnect to revoke access, then authenticates and authorizes again. Revocation failure clears local confirmation and stops; a changed channel on refresh disables automatic upload. Three platform-stub regression tests cover call order, failure and changed-target confirmation. Tests: 86 passed; static analysis clean. Actual desired-channel selection remains a device confirmation step.
+- User config.toml changed approval_policy to on-request, but the active GitHub MCP tool still returned requires approval / policy never. No remote write occurred. The running session's effective policy must be refreshed before retrying repository writes; do not switch to a different write mechanism to evade the approval requirement.
+
+
+## 2026-10-31: empty YouTube channel response
+
+- A single generic exception hid empty results, multiple results and malformed JSON shape. 0.15.2 distinguishes them and accepts empty nextPageToken for a single channel. Regression tests cover separate result kinds and omitted items with totalResults=0; 89 tests passed, analysis and APK build passed, versionCode 43 installed as update.
+- Actual device redacted metadata: kind=empty, count=0, total=0, hasNext=false. Automatic upload remains false. This is not evidence the channel does not exist. Ownership/delegated Studio permissions and Brand Account OAuth identity still need user confirmation. Do not create new Cloud projects or guess an upload destination. No Google consent controls were automated.
+
+## 2026-10-31: mobile external-browser OAuth with a PC broker (0.16.0)
+
+- User clarified: authenticate in the phone browser, optionally using its desktop-site view; video collection, editing and upload remain Android features. Desktop-site UI alone does not change OAuth client type or guarantee Brand Account selection. Use the existing Web OAuth client with exact callback http://127.0.0.1:8765/oauth/callback, not an Android custom-scheme/Desktop-client workaround.
+- PC broker listens only on loopback; existing authorized ADB reverse tunnel connects the phone. Provision a random pairing key directly into app-private files, then import into Android Keystore-encrypted preferences. Browser APIs reject Origin/Sec-Fetch-Site requests, enforce Host, disable redirects and require the pairing key. Browser callback is bound to a one-use state and PKCE S256 with a ten-minute lifetime. No request/code/token logs.
+- Web client secret and refresh token stay in current-user Windows DPAPI storage under ignored .local/youtube-auth. The phone receives only short-lived access tokens. Revalidate channels.list mine=true on confirmation/upload and token refresh; bind sessions to the PC client/channel identity. Switching channel disables automatic uploads until reconfirmation. Google consent remains manual.
+- Sandbox DPAPI CryptProtectData returns code 2 because the restricted execution profile has no usable user credential profile. Fail closed; do not write plaintext or weaken to machine-wide protection. Start the provided batch file in the normal Windows user environment. Actual DPAPI round-trip test is explicitly skipped only for code 2; failure-with-no-plaintext coverage passes.
+- Validation: 97 Flutter tests pass, analysis clean; Python broker checks 9 passed and 1 skipped for unavailable DPAPI profile. Live Google login/Brand Account selection and actual YouTube upload still require the user's Web client JSON and callback registration. Do not report those as verified.
+- Existing signing test assumed POSIX chmod bits on Windows, where stat returns 0666 despite chmod(0600). Keep exact 0600 assertion on the Linux CI platform; retain all bytes/secret/path assertions on Windows. No CI signing behavior changed. The five signing tests pass locally; the installed APK signature still matches the prior local debug certificate.
+- Device transport regression: half-closing a raw ADB exec socket can terminate cat before an atomic rename, leaving an old pairing key. Provision with shell v2 stdin frames and explicit CLOSE_STDIN (id 4), then require exit status id 3 success. Actual phone smoke test confirmed the provisioned random key equals the broker key, Keystore import succeeds and the HTTP API authorizes the request through ADB reverse. This test used no Google credentials. Retry after an initially missing pairing must reread the native key instead of caching an empty string; add app regression coverage.
