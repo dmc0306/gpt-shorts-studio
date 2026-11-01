@@ -4,6 +4,21 @@ import 'benchmark_data.dart';
 
 /// Reverse lookup only: no title, description or textual keywords are sent.
 /// Image bytes are sent to Google Cloud Vision WEB_DETECTION.
+/// Evidence counters from the one-click Web Detection response.
+/// Counts describe Google's web index, not verified original videos.
+class VisionSearchReport {
+  const VisionSearchReport({required this.candidates,required this.frames,
+    required this.pages,required this.pagesWithEvidence,
+    required this.socialPosts,required this.indexedImages});
+  final List<BenchOrigin> candidates;
+  final int frames,pages,pagesWithEvidence,socialPosts,indexedImages;
+  String get diagnostic {
+    if(pages==0)return 'Cloud Vision이 검색한 영상 프레임 $frames장 중 이미지 일치 웹페이지가 0개입니다. 이 영상의 장면이 웹 이미지 검색에 색인되지 않았을 수 있어요.';
+    if(socialPosts==0)return 'Cloud Vision 응답: 일치 웹페이지 $pages건 · 직접 이미지 일치 근거 $pagesWithEvidence건 · TikTok/Instagram/YouTube 개별 게시물 0건. 검색 엔진에 영상 게시물이 연결되지 않았어요.';
+    return 'Cloud Vision 응답: 이미지 검색 $frames장 · 일치 웹페이지 $pages건 · 직접 이미지 일치 근거 $pagesWithEvidence건 · 소셜 게시물 단서 $socialPosts건 · 원본 후보 ${candidates.length}건.';
+  }
+}
+
 class FrameReverseSearch {
   FrameReverseSearch(this.apiKey,{http.Client? client}):_client=client??http.Client();
   final String apiKey;
@@ -107,8 +122,33 @@ class FrameReverseSearch {
   }
 
   Future<List<BenchOrigin>> discover(String benchmarkId,List<dynamic> frames) async {
+    return (await discoverReport(benchmarkId,frames)).candidates;
+  }
+
+  Future<VisionSearchReport> discoverReport(String benchmarkId,List<dynamic> frames)async {
     final raw=await _responses(frames);
-    return discoveryCandidates(raw,benchmarkId);
+    var pages=0,withEvidence=0,social=0,images=0;
+    for(final response in raw){
+      if(response is! Map)continue;
+      final web=response['webDetection'];
+      if(web is! Map)continue;
+      for(final key in ['fullMatchingImages','partialMatchingImages','visuallySimilarImages']){
+        final items=web[key];
+        if(items is List)images+=items.length;
+      }
+      final matched=web['pagesWithMatchingImages'];
+      if(matched is! List)continue;
+      pages+=matched.length;
+      for(final item in matched){
+        if(item is! Map)continue;
+        final full=item['fullMatchingImages'],partial=item['partialMatchingImages'];
+        if((full is List&&full.isNotEmpty)||(partial is List&&partial.isNotEmpty))withEvidence++;
+        if(normalOrigin(item['url'] as String? ?? '')!=null)social++;
+      }
+    }
+    return VisionSearchReport(candidates:discoveryCandidates(raw,benchmarkId),
+      frames:frames.length,pages:pages,pagesWithEvidence:withEvidence,
+      socialPosts:social,indexedImages:images);
   }
 
   Future<List<dynamic>> _responses(List<dynamic> frames)async{
