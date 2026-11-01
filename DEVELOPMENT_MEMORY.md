@@ -1,3 +1,11 @@
+## 0.17.0 — HTTPS server authentication
+
+- User requested a continuously available authentication server instead of the PC broker. Added single-owner Docker/Caddy service using the shared PKCE/state/channel validation protocol with configurable HTTPS callback and server identity namespace.
+- Fernet encrypted persistent grants, fail closed on invalid key/ciphertext; client secret remains server environment only. API pairing key stored in Android Keystore; access tokens cached only in app memory. MP4 remains direct phone→YouTube.
+- Host and browser-origin validation, no-redirect clients, bounded server threads/rate buckets, redacted errors/no access logs. Private .env/connection.txt and encrypted data excluded from ZIP/git/Docker context.
+- Server regression covers restart+refresh, ciphertext tampering/wrong key, changed channel and HTTP authentication restrictions. Preserve PC flow tests. No live deployment or Google consent has been completed; host/domain are still required.
+- Google external/testing refresh tokens with YouTube scopes can expire after seven days. Do not promise permanent once-only authorization.
+
 ## 0.14.0 — 최종 크롭·구간 자막 검사 / 검색 카테고리
 
 - 자동 제작은 AI가 사용 구간을 선택한 뒤 그 시간 안의 중앙 정사각형 이미지를 실제로 잘라 기기 OCR을 실행합니다. 잘려 사라지는 상하/좌우 글자와 구간 밖 글자는 제외 사유가 아닙니다. 남는 글자 조각은 경계 검사로 보완합니다. AI의 sourceText/edited 판단 지침도 같은 표시 영역·시간 기준으로 맞춥니다. 간판/워터마크 구별, 기타 편집·AI 의심 기준은 유지합니다. OCR은 최대 16개 샘플 프레임 검사여서 짧은 자막을 놓치거나 현장 글자를 오인할 수 있습니다.
