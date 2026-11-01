@@ -1,10 +1,16 @@
 import 'dart:io';
+import 'dart:async';
 import 'benchmark_data.dart';
 import 'benchmark_stream.dart';
 import 'bridge.dart';
 import 'model.dart';
 import 'tiktok_download.dart';
 import 'vision_reverse.dart';
+
+class OneClickCancelled implements Exception {
+  const OneClickCancelled();
+  @override String toString()=> '원본 탐색을 중단했어요.';
+}
 
 class CandidateCheck {
   const CandidateCheck(this.origin,this.status,this.detail,{this.clip});
@@ -95,7 +101,19 @@ class OneClickExplorer {
   final String apiKey;
   final void Function(String message) report;
   static const maxVerifications=5;
-
+  static const maxSearch=Duration(minutes:3);
+  static const perCandidateLimit=Duration(seconds:95);
+  bool _cancelled=false;
+  BenchmarkStreamResolver? _activeResolver;
+  TikTokDownloader? _activeTikTok;
+  void cancel(){
+    _cancelled=true;
+    _activeResolver?.cancel();
+    _activeTikTok?.cancel();
+    Native.call('cancelTextScan');
+  }
+  void _check(){if(_cancelled)throw const OneClickCancelled();}
+  
   static String? youtubeId(String link){
     final uri=Uri.tryParse(link);
     if(uri==null)return null;
@@ -109,6 +127,7 @@ class OneClickExplorer {
   }
 
   Future<CandidateCheck> inspect(BenchOrigin origin,List<dynamic> reference)async{
+    _check();
     String? path;
     Clip? downloaded;
     var retainDownloaded=false;
@@ -118,20 +137,27 @@ class OneClickExplorer {
         report('원본 후보 실제 영상 검사 · YouTube');
         path=await Native.call<String>('benchmarkStreamCachePath',{'id':id});
         if(path==null)throw StateError('임시 다운로드 경로 없음');
-        await BenchmarkStreamResolver().download(id,path,(msg)=>report(msg));
+        _activeResolver=BenchmarkStreamResolver();
+        await _activeResolver!.download(id,path,(msg)=>report(msg));
+        _check();
       }else if(tiktokUrl(origin.url)!=null){
         report('원본 후보 실제 영상 검사 · TikTok');
         final d=TikTokDownloader();
+        _activeTikTok=d;
         try{
           downloaded=Clip.fromJson(await d.download(origin.url,
             (value,message)=>report(message),minDuration:5,maxDuration:60));
-        }finally{d.cancel();}
+        }finally{d.cancel();_activeTikTok=null;}
+        _check();
         path=downloaded.path;
       }else{
         return CandidateCheck(origin,'unsupported','이 플랫폼은 아직 자동 영상 스트림 확인을 지원하지 않아요.');
       }
       if(path==null||path.isEmpty)throw StateError('검증할 영상 파일이 없어요.');
-      final raw=await Native.call<Map<dynamic,dynamic>>('benchmarkInspectCandidate',{'path':path});
+      _check();
+      final raw=await Native.call<Map<dynamic,dynamic>>('benchmarkInspectCandidate',{'path':path})
+        .timeout(const Duration(seconds:75));
+      _check();
       if(raw==null)throw StateError('영상 프레임 검사 결과 없음');
       final frames=raw['frames'] as List? ?? [];
       final match=VideoMatch.match(reference,frames);
@@ -149,9 +175,13 @@ class OneClickExplorer {
       return CandidateCheck(origin,'checked',
         '실제 영상 ${match.matched}개 장면 교차일치 · 자막 의심 신호 미검출 (수동 최종 확인 권장)',
         clip:downloaded);
+    }on OneClickCancelled{
+      rethrow;
     }catch(e){
+      if(_cancelled)throw const OneClickCancelled();
       return CandidateCheck(origin,'error','후보 영상 확인 실패: $e');
     }finally{
+      _activeResolver=null;_activeTikTok=null;
       if(downloaded!=null&&!retainDownloaded){
         try{await Native.call('deleteLocalVideo',
           {'paths':[downloaded.path,downloaded.thumbnail]});}catch(_){}
@@ -163,10 +193,16 @@ class OneClickExplorer {
   }
 
   Future<OneClickResult> run(String benchmarkId,List<dynamic> frames)async{
-    report('주요 장면 6개로 원본 후보 탐색 중');
+    final watch=Stopwatch()..start();
+    _check();
+    report('1/3 · 주요 장면으로 웹 이미지 후보 검색 중');
     final finder=FrameReverseSearch(apiKey);
     List<BenchOrigin> discovered;
-    try{discovered=await finder.discover(benchmarkId,frames);}
+    try{
+      discovered=await finder.discover(benchmarkId,frames)
+        .timeout(const Duration(seconds:95));
+      _check();
+    }
     finally{finder.close();}
     if(discovered.isEmpty){
       return const OneClickResult([],total:0,inspected:0);
@@ -174,11 +210,22 @@ class OneClickExplorer {
     final results=<CandidateCheck>[];
     var checked=0;
     for(final origin in discovered){
-      if(checked>=maxVerifications)break;
+      _check();
+      if(checked>=maxVerifications||watch.elapsed>=maxSearch){
+        report('검증 제한에 도달했어요. 나머지는 확인되지 않은 후보로 남겨요.');
+        break;
+      }
       if(youtubeId(origin.url)==null&&tiktokUrl(origin.url)==null)continue;
       checked++;
-      report('원본 후보 동영상 교차확인 $checked/$maxVerifications');
-      final verdict=await inspect(origin,frames);
+      report('2/3 · 후보 $checked/$maxVerifications 동영상과 기존 자막 확인 중');
+      final verdict=await inspect(origin,frames).timeout(
+        perCandidateLimit,onTimeout:(){
+          _activeResolver?.cancel();
+          _activeTikTok?.cancel();
+          Native.call('cancelTextScan');
+          return CandidateCheck(origin,'error','개별 후보 95초 제한 초과 · 다음 후보로 진행');
+        });
+      _check();
       if(verdict.status!='checked'&&verdict.clip!=null){
         try{await Native.call('deleteLocalVideo',{'paths':[verdict.clip!.path,verdict.clip!.thumbnail]});}
         catch(_){}
@@ -192,6 +239,8 @@ class OneClickExplorer {
       if(results.any((c)=>c.origin.url==origin.url))continue;
       results.add(CandidateCheck(origin,'unverified','영상 프레임 미검증 · 관련 페이지라는 사실만 확인됨'));
     }
+    _check();
+    report('3/3 · 실제 영상 대조 결과 정리 중');
     results.sort((a,b){
       int weight(String s)=>switch(s){'checked'=>0,'overlay'=>1,'unverified'=>2,'unsupported'=>3,_=>4};
       return weight(a.status).compareTo(weight(b.status));
