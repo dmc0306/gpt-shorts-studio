@@ -260,7 +260,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
          label:Text(cancelled?'중단 처리 중':'검색 중단'))),
      ],
      if(framePreviews[v.id]?.isNotEmpty==true)...[
-       const Text('실제 검색에 사용한 장면 (자막 영역 크롭)',style:TextStyle(fontSize:12,fontWeight:FontWeight.bold)),
+       const Text('실제 검색에 사용한 장면 (영상 중앙부 · 상하단 편집 자막 제외 시도)',style:TextStyle(fontSize:12,fontWeight:FontWeight.bold)),
        const SizedBox(height:6),
        SizedBox(height:124,child:ListView.separated(
          scrollDirection:Axis.horizontal,
