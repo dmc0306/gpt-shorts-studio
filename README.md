@@ -1,3 +1,13 @@
+## 0.20.3 — [1단계] YouTube 영상 스트림 자동 확보 → 실제 장면 추출
+
+- 벤치마킹 선정 영상에서 **영상 스트림 자동 검색** 버튼을 누르면 YouTube의 공개 영상 스트림 메타데이터를 확인하고, 80MB 이하 H.264 MP4 video-only 스트림을 골라 임시 저장합니다. `youtube_explode_dart ^3.1.0`의 비공식 추출 기능을 사용하며 영상에 따라 접근 제한·서명/JS 검증으로 실패할 수 있습니다.
+- 앱 내부 임시 디렉터리 `cache/benchmark-streams/<videoId>.mp4`에 저장된 스트림을 Android `MediaMetadataRetriever`로 직접 열어 실제 프레임 6장을 추출합니다. 이미지 역검색은 기존 Cloud Vision WEB_DETECTION 사용. 파일은 추출 성공/실패 후 삭제 시도합니다.
+- 기존 **영상 파일 직접 선택** 버튼을 비상 대안으로 유지합니다. 타이틀/설명란/Tavily 기반 원본 후보 검색으로 되돌아가지 않습니다.
+- 조회수 상위 50개 캐시, 중복 제외 추첨, Google Cloud Vision 검색 결과 캐시는 유지. GIF/영상 파일을 사용자에게 요구하지 않고 자동 시도하지만 실기기 재생 URL 추출 성공은 보장하지 않습니다.
+- **이번 단계에는 원본 후보의 자막·편집 효과 자동 제외 판정을 아직 추가하지 않았습니다.** 추후 OCR·시간축 변화 검사와 보류 기준을 검증한 뒤 별도 업데이트할 예정입니다.
+- 구현: `lib/benchmark_stream.dart` (`tool/benchmark_stream.dart`), `lib/benchmark_ui.dart`, `native/android/BenchmarkFrameExtractor.kt`, `native/android/MainActivity.kt`; 회귀 테스트 `test/benchmark_test.dart`.
+- 공개 YouTube 콘텐츠의 다운로드 및 재사용에는 YouTube 정책·권리 범위가 적용될 수 있습니다. 공식 YouTube Data API는 스트림을 제공하지 않습니다.
+
 ## 0.20.2 — 주요 장면 역이미지 검색으로 원본 탐색 변경
 
 - **기존 설명란 출처 자동 추출 및 Tavily 제목 기반 원본 검색 제거.** Google Cloud Vision `WEB_DETECTION` 이미지 검색만 사용합니다.
