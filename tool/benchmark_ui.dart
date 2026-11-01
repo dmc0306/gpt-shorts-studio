@@ -53,7 +53,10 @@ class _BenchmarkState extends State<BenchmarkScreen>{
   if(mounted)setState(()=>loading=false);
  }
  Future<void> save()=>Native.call('saveBenchmarkState',{'json':jsonEncode(state.toJson())});
- void report(String s){if(mounted)setState(()=>message=s);}
+ void report(String s){
+   if(activeVideoId!=null)state.diagnostics[activeVideoId!]=s;
+   if(mounted)setState(()=>message=s);
+ }
  Future<void> run(Future<void> Function() action)async{
   if(busy)return;setState(()=>busy=true);
   try{await action();await save();}catch(e){report('작업 실패: $e');}
@@ -116,6 +119,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
     final explorer=OneClickExplorer(key,(message)=>report(message));
     activeExplorer=explorer;
     final result=await explorer.run(v.id,frames);
+    state.diagnostics[v.id]=result.diagnostic;
     if(cancelled)throw const OneClickCancelled();
     final visible=<BenchOrigin>[];
     for(final item in result.results){
@@ -154,7 +158,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
         clip:original,onSave:widget.onSave,autoGenerateOnOpen:true)));
       report('자동 확인된 후보를 편집기로 연결했어요. 게시 전 원본·기존 자막 여부를 최종 확인해 주세요.');
     }else{
-      report('원클릭 탐색 완료 · 이미지 후보 ${result.total}개 · 실제 영상 검사 ${result.inspected}개 · 자동 제작 조건을 통과한 TikTok 원본 없음. 화면의 후보와 사유를 확인해 주세요.');
+      report('${result.diagnostic} 최종 템플릿 제작 가능 원본 없음. 후보별 사유를 아래에서 확인하세요.');
     }
   });
   }finally{
@@ -266,7 +270,11 @@ class _BenchmarkState extends State<BenchmarkScreen>{
            width:105,height:120,fit:BoxFit.cover))),
        const SizedBox(height:8),
      ],
-     if(list.isEmpty&&!busy)const Text('확인된 원본 후보 없음 · 이미지 색인에 원본이 없거나 후보 영상 비교에서 탈락했을 수 있어요.',
+     if(!busy&&state.diagnostics[v.id]?.isNotEmpty==true)
+       Padding(padding:const EdgeInsets.symmetric(vertical:8),
+         child:SelectableText('마지막 원본 탐색 진단: ${state.diagnostics[v.id]}',
+            style:const TextStyle(fontSize:12))),
+     if(list.isEmpty&&!busy)const Text('원본 후보 없음 · 위 진단을 확인하세요. 웹 이미지 색인에 영상 원본이 없을 수도 있습니다.',
        style:TextStyle(fontSize:12)),
      for(final x in list)RadioListTile<String>(dense:true,contentPadding:EdgeInsets.zero,
       title:Text('${x.source}: ${x.url}',maxLines:2,overflow:TextOverflow.ellipsis),
