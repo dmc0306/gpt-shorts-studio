@@ -1,3 +1,10 @@
+## 0.19.0 — 휴대폰 Chrome 직접 로그인, PC·인증 서버 없이
+
+- 사용자가 제공한 Android OAuth 클라이언트로 Chrome 앱에서 직접 로그인하고 앱 전용 URI로 돌아옵니다. Google Cloud의 Android 클라이언트 고급 설정에서 Custom URI scheme 허용을 켜고 저장해야 합니다. 자세한 설정은 YOUTUBE_CHROME_AUTH.md를 확인하세요.
+- 앱 설정의 **Chrome에서 로그인 · 브랜드 채널 선택**이 기본 연결입니다. 실제 채널 이름·ID 확인 후 자동 업로드를 켭니다. **인증 갱신 확인 · 업로드 없음**으로 토큰 갱신과 채널을 재검증할 수 있습니다.
+- AppAuth authorization-code + S256 PKCE + state 검증, Android Keystore 암호화 저장, 휴대폰에서 직접 갱신합니다. 웹 secret/PC/ADB/별도 서버가 필요하지 않습니다. 기존 PC/서버/Android 진단은 고급 영역에 유지합니다.
+- 실제 브랜드 채널 선택/Google 복귀/토큰 발급·갱신은 사용자 기기 확인 전이며 빌드 성공과 구분합니다.
+
 ## 0.18.1 — Google 인증 자동 종료 원인 표시
 
 - 사용자 기기에서 Gmail만 표시되고 계정 선택 뒤 Google 화면이 자동 종료되는 현상을 확인했습니다. 기존 AUTH_NATIVE_CANCELLED 문구만으로 사용자 취소라고 단정하지 않습니다.

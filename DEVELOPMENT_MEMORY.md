@@ -1,3 +1,13 @@
+## 0.19.0 — External Chrome with Android public OAuth client
+
+- User explicitly requires phone app button → installed Chrome app → Brand selection → app return, with no PC/ADB/server. Supplied public Android client ID 337875283119-som1inoqhtgpf1jvkk4b31tg46rub1ag.apps.googleusercontent.com and confirmed Custom URI scheme option exists. Must enable/save that option in Google Cloud; do not ask for web secret.
+- Correct earlier overstatement that a server is mandatory: Google official 2023 Custom URI scheme restrictions guidance documents Android opt-in. Current generic OAuth docs sometimes say unsupported by default; require console opt-in and live validation rather than claiming guaranteed support.
+- AppAuth 0.11.1 verified against Maven metadata/source. Use Android public client, Google fixed endpoints, S256 PKCE, state, reverse-client-ID redirect scheme, external signed Chrome browser matcher excluding Custom Tabs. No identity/OpenID/Drive scopes. Request offline access; store only completed AuthState with existing Android Keystore AES-GCM and flush preferences.
+- Refresh uses AppAuth fresh-token handling with fixed endpoint/redirect/client validation and no client secret; manual forced-refresh check added. Missing refresh grant blocks enabling automatic upload. Actual channel confirmation/target validation and private/resumable upload preserved. New login clears automatic confirmation before granting access.
+- Opening settings no longer performs personal Google Sign-In first. Chrome is primary; legacy server/PC/native probe controls moved to an expansion section. Native probes remain diagnostic.
+- Tests cover public Chrome bridge without PC/server/Google sign-in calls, persistence/restoration, forced refresh, changed-channel deconfirmation, no-refresh gate, redacted failures and disconnection. Existing legacy cancellation settings test expands advanced section before editing.
+- Brand picker availability, Google callback/token exchange/refresh and real upload require device validation. Do not report as verified from mocks or compilation. Login interrupted by process death must restart; no unencrypted pending tokens.
+
 ## 0.18.1 — Preserve automatic Google authorization exit diagnostics
 
 - Actual user device observation: selecting Gmail closed the Google UI automatically; no Brand identities were shown. AUTH_NATIVE_CANCELLED was our own blanket classification, not evidence of explicit user cancellation or SDK status 16.
