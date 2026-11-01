@@ -4,6 +4,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shorts_studio/benchmark_data.dart';
 import 'package:shorts_studio/vision_reverse.dart';
+import 'package:shorts_studio/benchmark_stream.dart';
+import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
 void main(){
  test('Video length parser and Shorts candidate bounds',(){
@@ -109,4 +111,12 @@ void main(){
    engine.close();
  });
 
+
+ test('YouTube video-only stream rejects unsupported manifest safely',(){
+   expect(()=>BenchmarkStreamResolver.choose(<VideoOnlyStreamInfo>[]),
+     throwsA(isA<BenchmarkStreamError>()));
+ });
+ test('Video-only stream size cap prevents oversized temporary cache',(){
+   expect(BenchmarkStreamResolver.maxBytes,lessThan(100*1024*1024));
+ });
 }
