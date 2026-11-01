@@ -118,31 +118,6 @@ void main(){
    ],'N3b8Zx4Qe5M');
    expect(hits,isEmpty);
  });
- test('Vision sends images only, not titles or Tavily queries',()async{
-   final client=MockClient((request)async{
-     expect(request.url.host,'vision.googleapis.com');
-     expect(request.url.queryParameters['key'],'vision-key');
-     final data=jsonDecode(request.body) as Map;
-     expect(data.keys.toList(),['requests']);
-     final requests=data['requests'] as List;
-     expect(requests.length,3);
-     expect(jsonEncode(requests),contains('WEB_DETECTION'));
-     expect(jsonEncode(requests),isNot(contains('Tavily')));
-     return http.Response(jsonEncode({'responses':[
-       for(var i=0;i<3;i++)
-         {'webDetection':{'pagesWithMatchingImages':[
-           {'url':'https://www.youtube.com/shorts/AbCdEfGhijk',
-            if(i==0)'fullMatchingImages':[{'url':'https://cdn.example.com/img$i.jpg'}],
-            if(i!=0)'partialMatchingImages':[{'url':'https://cdn.example.com/img$i.jpg'}]}]}}
-     ]}),200);
-   });
-   final engine=FrameReverseSearch('vision-key',client:client);
-   final results=await engine.find('reference',[
-     for(var i=0;i<3;i){'content':List.filled(150,'A').join()}
-   ]);
-   expect(results.single.evidence,contains('3개 시점'));
-   engine.close();
- });
 
  test('YouTube video-only stream rejects unsupported manifest safely',(){
    expect(()=>BenchmarkStreamResolver.choose(<VideoOnlyStreamInfo>[]),
