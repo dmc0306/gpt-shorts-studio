@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:io';
+import 'benchmark_stream.dart';
 import 'package:flutter/material.dart';
 import 'benchmark_data.dart';
 import 'bridge.dart';
@@ -58,29 +60,47 @@ class _BenchmarkState extends State<BenchmarkScreen>{
    report('$ok개 채널 분석 성공. 최신 조회수 상위 50개씩 저장했어요. 일부 수집된 채널은 결과가 불완전할 수 있어요.');
   }finally{client.close();}
  });
- Future<void> search(BenchVideo v)async{
+ Future<void> search(BenchVideo v,{bool manual=false})async{
   if(busy)return;
-  if(visionKeyText.text.trim().isEmpty && keyText.text.trim().isEmpty){
-    report('Cloud Vision API 키를 먼저 입력하세요. YouTube 키도 Vision API를 허용한다면 재사용할 수 있어요.');
+  if(visionKeyText.text.trim().isEmpty&&keyText.text.trim().isEmpty){
+    report('Cloud Vision API 키를 입력해 주세요.');
     return;
   }
-  List<dynamic>? frames;
-  try{
-    frames=await Native.call<List<dynamic>>('benchmarkPickFrames');
-  }catch(e){report('벤치마킹 영상 파일에서 장면을 추출하지 못했어요: $e');return;}
-  if(frames==null){report('영상 파일 선택을 취소했어요.');return;}
   await run(()async{
-   report('${v.title} · 실제 영상 프레임 ${frames!.length}장 이미지 검색 중');
-   final key=visionKeyText.text.trim().isNotEmpty?visionKeyText.text.trim():keyText.text.trim();
-   final service=FrameReverseSearch(key);
-   try{
-     final candidates=await service.find(v.id,frames!);
-     state.origins[v.id]=candidates;
-     state.chosen.remove(v.id);
-     report(candidates.isEmpty
-      ?'영상 장면과 일치하는 소셜 영상 페이지를 찾지 못했어요. 다른 프레임이 포함된 영상을 선택해 재검색할 수 있어요.'
-      :'서로 다른 프레임의 중복 일치 순으로 원본 후보 ${candidates.length}개를 찾았어요.');
-   }finally{service.close();}
+    List<dynamic>? frames;
+    if(manual){
+      report('기기에서 영상 파일을 선택해 주세요.');
+      frames=await Native.call<List<dynamic>>('benchmarkPickFrames');
+      if(frames==null){report('파일 선택을 취소했어요.');return;}
+    }else{
+      final path=await Native.call<String>('benchmarkStreamCachePath',{'id':v.id});
+      if(path==null)throw StateError('기기의 영상 임시 경로를 확인할 수 없어요.');
+      try{
+        final resolver=BenchmarkStreamResolver();
+        await resolver.download(v.id,path,(msg)=>report(msg));
+        report('실제 YouTube 스트림에서 프레임 추출 중');
+        frames=await Native.call<List<dynamic>>('benchmarkExtractFramesFromCache',{'id':v.id});
+      }finally{
+        try{
+          final tmp=File(path);
+          if(await tmp.exists())await tmp.delete();
+        }catch(_){}
+      }
+    }
+    if(frames==null||frames.isEmpty){
+      report('검색 가능한 영상 장면이 없어요. 직접 파일 선택으로 재시도해 주세요.');
+      return;
+    }
+    report('실제 프레임 ${frames.length}장으로 역이미지 검색 중');
+    final key=visionKeyText.text.trim().isNotEmpty?visionKeyText.text.trim():keyText.text.trim();
+    final engine=FrameReverseSearch(key);
+    try{
+      final results=await engine.find(v.id,frames);
+      state.origins[v.id]=results;
+      state.chosen.remove(v.id);
+      report(results.isEmpty?'일치하는 게시물 URL을 찾지 못했어요. 영상 파일 선택 방식으로 재검색할 수 있어요.':
+        '프레임이 반복 일치하는 원본 후보 ${results.length}개를 찾았어요.');
+    }finally{engine.close();}
   });
  }
  Future<void> addOrigin(BenchVideo v)async{
@@ -161,7 +181,8 @@ class _BenchmarkState extends State<BenchmarkScreen>{
      TextButton.icon(onPressed:()=>open(v.url),icon:const Icon(Icons.open_in_new),
       label:const Text('벤치마킹 영상 확인')),
      Wrap(spacing:8,children:[
-      OutlinedButton(onPressed:busy?null:()=>search(v),child:const Text('주요 장면 역이미지 검색')),
+      OutlinedButton(onPressed:busy?null:()=>search(v),child:const Text('영상 스트림 자동 검색')),
+      OutlinedButton(onPressed:busy?null:()=>search(v,manual:true),child:const Text('영상 파일 직접 선택')),
       OutlinedButton(onPressed:busy?null:()=>addOrigin(v),child:const Text('원본 링크 추가'))]),
      if(list.isEmpty)const Text('주요 장면 이미지 검색 결과 없음',style:TextStyle(fontSize:12)),
      for(final x in list)RadioListTile<String>(dense:true,contentPadding:EdgeInsets.zero,
@@ -199,7 +220,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
        await Native.call('saveBenchmarkVisionKey',{'key':visionKeyText.text.trim()});
        report('Vision 검색 키를 암호화 저장했어요.');
      }),child:const Text('Vision API 키 저장')),
-    const Text('실제 영상의 주요 장면 검색을 위해 영상 파일 선택이 필요합니다. 제목·설명란·Tavily 검색은 사용하지 않아요.',
+    const Text('선정 영상의 공개 스트림에서 주요 장면을 자동 추출합니다. 스트림을 열 수 없는 경우 직접 파일 선택을 이용하세요. 제목·설명란·Tavily는 검색하지 않아요.',
       style:TextStyle(fontSize:12)),
     Text('채널 ${state.channels.length}개 · 순위 후보 $count개',style:const TextStyle(fontWeight:FontWeight.bold)),
     Row(children:[
