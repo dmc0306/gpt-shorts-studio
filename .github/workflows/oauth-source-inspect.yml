@@ -48,13 +48,13 @@ jobs:
           python3 - <<'PY'
           import zipfile
           z=zipfile.ZipFile('shorts-studio-source.zip')
-          for n in ('native/android/YouTubeChromeAuth.kt','native/android/MainActivity.kt','lib/youtube_chrome.dart','lib/youtube_settings.dart','tool/bootstrap.py','YOUTUBE_CHROME_AUTH.md'):
+          for n in ('native/android/YouTubeChromeAuth.kt','native/android/MainActivity.kt','lib/youtube_chrome.dart','lib/youtube_settings.dart','lib/youtube.dart','test/youtube_chrome_test.dart','test/youtube_integration_ui_test.dart','tool/bootstrap.py','YOUTUBE_CHROME_AUTH.md'):
               if n not in z.namelist():continue
               print('===== SOURCEFILE',n)
               s=z.read(n).decode('utf-8')
               lines=s.splitlines()
-              if n=='lib/youtube_settings.dart':
-                  matches=[i for i,l in enumerate(lines) if 'chrome' in l.lower() or 'oauth' in l.lower()]
+              if n in ('lib/youtube_settings.dart','lib/youtube.dart','test/youtube_integration_ui_test.dart'):
+                  matches=[i for i,l in enumerate(lines) if any(k in l.lower() for k in ('chrome','oauth','youtube.connected','connectchrome'))]
                   idx=set()
                   for i in matches:
                       idx.update(range(max(0,i-7),min(len(lines),i+13)))
