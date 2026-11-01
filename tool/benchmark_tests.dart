@@ -190,4 +190,16 @@ void main(){
    expect(restored.diagnostics['abc123'],state.diagnostics['abc123']);
  });
 
+ test('Thumbnail fallback is image-only evidence, never sufficient for video confirmation',(){
+   final reference=[
+     {'hash':'aaaaaaaaaaaaaaaa','contrast':25},
+     {'hash':'5555555555555555','contrast':36}
+   ];
+   expect(CandidateThumbnail.closest(reference,'aaaaaaaaaaaaaaaa'),0);
+   expect(CandidateThumbnail.closest(reference,'FFFFFFFFFFFFFFFF'),greaterThan(0));
+   expect(VideoMatch.strong(VideoMatch.match(reference,[
+     {'hash':'aaaaaaaaaaaaaaaa','contrast':35}
+   ])),false);
+ });
+
 }
