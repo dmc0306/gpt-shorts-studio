@@ -1,0 +1,29 @@
+name: Inspect native share and Android dependencies
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-lens-share.yml'
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dump only relevant Android and Flutter wiring
+        run: |
+          python3 - <<'PY'
+          from zipfile import ZipFile
+          z=ZipFile('shorts-studio-source.zip')
+          for n in ['native/android/MainActivity.kt','native/android/AndroidManifest.xml','native/android/build.gradle.kts','native/android/build.gradle','pubspec.yaml','lib/bridge.dart','native/android/BenchmarkFrameExtractor.kt']:
+              if n not in z.namelist():continue
+              print('===',n)
+              lines=z.read(n).decode().splitlines()
+              if n.endswith('MainActivity.kt'):
+                  indexes=set(range(min(60,len(lines))))
+                  for i,line in enumerate(lines):
+                      if any(w in line for w in ('benchmarkPickFrames','benchmarkInspectCandidate','benchmarkFingerprintImage','openBenchmarkLink','FileProvider','Intent.ACTION_SEND','File(cacheDir','MethodChannel','fun async','private fun async')):
+                          indexes.update(range(max(0,i-4),min(len(lines),i+12)))
+                  seq=sorted(indexes)
+              else:seq=range(min(len(lines),210))
+              for i in seq:print(f'{i+1}: {lines[i]}')
+          PY
