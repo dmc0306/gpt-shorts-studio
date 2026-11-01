@@ -1,0 +1,25 @@
+name: Apply direct Chrome OAuth callback fix
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tool/patch_oauth_direct.py'
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Validate and patch versioned application source
+        run: python3 tool/patch_oauth_direct.py
+      - name: Commit patched source ZIP
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add shorts-studio-source.zip
+          git diff --cached --quiet && { echo "Source was not modified"; exit 1; }
+          git commit -m "Handle direct Android Chrome redirect without AppAuth manager activity"
+          git push
