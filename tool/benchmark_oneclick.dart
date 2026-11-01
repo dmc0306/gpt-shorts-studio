@@ -140,7 +140,35 @@ class CandidateThumbnail {
   }
 
   static Future<String> check(String videoId,List<dynamic> frames)async{
-    if(!RegExp(r'^[A-Za-z0-9_-]{11}
+    if(!RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(videoId)){
+      return 'YouTube 영상 ID가 올바르지 않아요.';
+    }
+    final client=http.Client();
+    try{
+      final imageUrl=Uri.https('i.ytimg.com','/vi/$videoId/hqdefault.jpg');
+      final response=await client.get(imageUrl).timeout(const Duration(seconds:9));
+      if(response.statusCode!=200||response.bodyBytes.length<500||
+          response.bodyBytes.length>1024*1024){
+        return 'YouTube 공개 썸네일 접근 불가';
+      }
+      final imageHash=await Native.call<Map<dynamic,dynamic>>(
+        'benchmarkFingerprintImage',{'content':base64Encode(response.bodyBytes)})
+        .timeout(const Duration(seconds:8));
+      if(imageHash==null || imageHash['hash'] is! String){
+        return '썸네일 시각 지문 검사 실패';
+      }
+      final distance=closest(frames,imageHash['hash'] as String);
+      if(distance<=9){
+        return '공개 썸네일과 일부 장면 유사 (해시 거리 $distance/64) · 원본 확정 아님';
+      }
+      return '썸네일로 장면 일치 미확인 (해시 거리 $distance/64) · 다른 썸네일일 수 있음';
+    }catch(_){
+      return '공개 썸네일 검사 실패 · 영상 일치 여부 미확인';
+    }finally{client.close();}
+  }
+}
+
+class OneClickExplorer {
   OneClickExplorer(this.apiKey,this.report);
   final String apiKey;
   final void Function(String message) report;
