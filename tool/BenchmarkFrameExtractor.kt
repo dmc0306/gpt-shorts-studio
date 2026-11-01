@@ -2,6 +2,7 @@ package com.local.shorts_studio
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.util.Base64
@@ -66,6 +67,21 @@ object BenchmarkFrameExtractor {
             require(result.size>=4){"후보에서 비교할 장면이 너무 적어요."}
             return result
         } finally {media.release()}
+    }
+
+    /** Verifies a downloaded YouTube thumbnail without storing its bytes. */
+    fun fingerprintJpeg(bytes:ByteArray):Map<String,Any>{
+        require(bytes.size in 128..(1024*1024)){"썸네일 크기가 올바르지 않아요."}
+        val bitmap=BitmapFactory.decodeByteArray(bytes,0,bytes.size)
+            ?:error("썸네일 이미지 디코딩 실패")
+        try{
+            require(bitmap.width>=72 && bitmap.height>=72){"썸네일 해상도 부족"}
+            val cropped=centerCrop(bitmap)
+            try{
+                val (hash,contrast)=perceptualHash(cropped)
+                return mapOf("hash" to hash,"contrast" to contrast)
+            }finally{cropped.recycle()}
+        }finally{bitmap.recycle()}
     }
 
     private fun centerCrop(frame:Bitmap):Bitmap {
