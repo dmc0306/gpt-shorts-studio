@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/apply-stream.yml'
+      - 'tool/patch_stream.py'
 permissions:
   contents: write
 jobs:
