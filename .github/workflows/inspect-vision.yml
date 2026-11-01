@@ -21,7 +21,7 @@ jobs:
             rows=z.read(name).decode("utf-8").splitlines()
             print(f"==== {name} ({len(rows)} lines)")
             if name=="native/android/MainActivity.kt":
-              idx=set(range(min(72,len(rows))) | set(range(271,min(290,len(rows))))
+              idx=set(range(min(72,len(rows)))) | set(range(271,min(290,len(rows))))
               for i,line in enumerate(rows):
                 if any(k in line for k in ('pickVideo','loadBenchmark','benchmarkApi','openBenchmark','loadAiSettings',
                    'saveAiKey','atomicWrite','MethodCall','when(call.method','\"pickVideo\"','\"loadAiSettings\"',
