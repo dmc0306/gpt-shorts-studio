@@ -2,7 +2,7 @@
 """Replace benchmark text-search and authorization form with video-frame reverse image search."""
 from pathlib import Path
 from zipfile import ZipFile
-import os
+import os,re
 
 archive=Path('shorts-studio-source.zip')
 target=archive.with_suffix('.vision.zip')
@@ -21,6 +21,14 @@ def change(path,a,b):
         if stripped!=a and s.count(stripped)==1:
             a=stripped
             n=1
+    if n!=1:
+        # Match exact text across legacy indentation variants, once only.
+        pattern=r'[ \\t]*'+r'[ \\t]*\\n[ \\t]*'.join(re.escape(line.strip()) for line in a.splitlines())
+        hits=list(re.finditer(pattern,s))
+        if len(hits)==1:
+            m=hits[0]
+            updates[path]=s[:m.start()]+b+s[m.end():]
+            return
     if n!=1:raise RuntimeError(f'{path}: expected one anchor, got {n}: {a[:90]!r}')
     updates[path]=s.replace(a,b,1)
 
@@ -105,8 +113,10 @@ change(ui,
 change(ui,"     if(list.isEmpty)const Text('원본 후보 미확인 · 제작 불가',style:TextStyle(fontSize:12)),",
     "     if(list.isEmpty)const Text('주요 장면 이미지 검색 결과 없음',style:TextStyle(fontSize:12)),")
 old=original(ui)
-a=old.index("     DropdownButtonFormField<String>(key:ValueKey('rights:")
-b=old.index("     const SizedBox(height:8),",a)
+a=old.index("DropdownButtonFormField<String>(key:ValueKey('rights:")
+a=old.rfind("\n",0,a)+1
+b=old.index("const SizedBox(height:8),",a)
+b=old.rfind("\n",0,b)+1
 updates[ui]=old[:a]+old[b:]
 change(ui,"label:const Text('권한 확인 원본 → 템플릿 제작')",
    "label:const Text('선택한 원본 → 템플릿 제작')")
