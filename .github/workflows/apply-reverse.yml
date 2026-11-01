@@ -1,0 +1,26 @@
+name: Apply reverse scene image lookup
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/apply-reverse.yml'
+      - 'tool/patch_reverse.py'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Apply assertion-guarded image-only feature patch
+        run: python3 tool/patch_reverse.py
+      - name: Commit patched source and canonical source files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add shorts-studio-source.zip tool/benchmark_ui.dart tool/benchmark_data.dart tool/benchmark_tests.dart
+          git diff --cached --quiet && { echo "No file changes"; exit 1; }
+          git commit -m "Use actual video scene reverse image search, remove text and rights gates"
+          git push
