@@ -53,6 +53,7 @@ String? normalOrigin(String input){
   return null;
 }
 class BenchState {
+  BenchState();
   final channels=<String,String>{for(final c in BenchChannel.defaults)c.id:c.label};
   final top=<String,List<BenchVideo>>{},scanned=<String,int>{},complete=<String,bool>{};
   final seen=<String>{},selected=<String>[];
