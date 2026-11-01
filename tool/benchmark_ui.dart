@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'benchmark_stream.dart';
 import 'package:flutter/material.dart';
 import 'benchmark_data.dart';
@@ -18,6 +19,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
  final keyText=TextEditingController(),visionKeyText=TextEditingController(),channelText=TextEditingController(),originText=TextEditingController();
  BenchState state=BenchState();
  String message='';
+ final framePreviews=<String,List<Uint8List>>{};
  bool busy=false,loading=true;
  @override void initState(){super.initState();load();}
  @override void dispose(){keyText.dispose();visionKeyText.dispose();channelText.dispose();originText.dispose();super.dispose();}
@@ -30,7 +32,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
    // Expire the previous text-search origin suggestions; keep user-added links.
    for(final id in state.origins.keys.toList()){
      state.origins[id]=state.origins[id]!.where((c)=>
-       c.source=='프레임 역이미지 검색'||c.source=='직접 추가').toList();
+       c.source=='직접일치 교차검증 v2'||c.source=='직접 추가').toList();
      if(!state.origins[id]!.any((c)=>c.url==state.chosen[id]))state.chosen.remove(id);
    }
   }catch(_){message='이전 소재 기록을 불러오지 못했어요.';}
@@ -91,15 +93,22 @@ class _BenchmarkState extends State<BenchmarkScreen>{
       report('검색 가능한 영상 장면이 없어요. 직접 파일 선택으로 재시도해 주세요.');
       return;
     }
-    report('실제 프레임 ${frames.length}장으로 역이미지 검색 중');
+    final images=<Uint8List>[];
+    for(final entry in frames){
+      if(entry is Map && entry['content'] is String){
+        images.add(base64Decode(entry['content'] as String));
+      }
+    }
+    if(mounted)setState(()=>framePreviews[v.id]=images);
+    report('실제 프레임 ${frames.length}장으로 역이미지 검색 중 · 직접 일치 근거를 교차검증합니다.');
     final key=visionKeyText.text.trim().isNotEmpty?visionKeyText.text.trim():keyText.text.trim();
     final engine=FrameReverseSearch(key);
     try{
       final results=await engine.find(v.id,frames);
       state.origins[v.id]=results;
       state.chosen.remove(v.id);
-      report(results.isEmpty?'일치하는 게시물 URL을 찾지 못했어요. 영상 파일 선택 방식으로 재검색할 수 있어요.':
-        '프레임이 반복 일치하는 원본 후보 ${results.length}개를 찾았어요.');
+      report(results.isEmpty?'직접 일치 근거가 있는 후보를 찾지 못했어요. 관련 영상 링크는 오탐 방지를 위해 숨겼습니다.':
+        '서로 다른 3개 이상 장면과 직접 일치하는 후보 ${results.length}개를 찾았어요.');
     }finally{engine.close();}
   });
  }
@@ -184,7 +193,19 @@ class _BenchmarkState extends State<BenchmarkScreen>{
       OutlinedButton(onPressed:busy?null:()=>search(v),child:const Text('영상 스트림 자동 검색')),
       OutlinedButton(onPressed:busy?null:()=>search(v,manual:true),child:const Text('영상 파일 직접 선택')),
       OutlinedButton(onPressed:busy?null:()=>addOrigin(v),child:const Text('원본 링크 추가'))]),
-     if(list.isEmpty)const Text('주요 장면 이미지 검색 결과 없음',style:TextStyle(fontSize:12)),
+     if(framePreviews[v.id]?.isNotEmpty==true)...[
+       const Text('실제 검색에 사용한 장면 (자막 영역 크롭)',style:TextStyle(fontSize:12,fontWeight:FontWeight.bold)),
+       const SizedBox(height:6),
+       SizedBox(height:124,child:ListView.separated(
+         scrollDirection:Axis.horizontal,
+         itemCount:framePreviews[v.id]!.length,
+         separatorBuilder:(_,i)=>const SizedBox(width:6),
+         itemBuilder:(_,index)=>Image.memory(framePreviews[v.id]![index],
+           width:105,height:120,fit:BoxFit.cover))),
+       const SizedBox(height:8),
+     ],
+     if(list.isEmpty)const Text('확인된 직접 일치 후보 없음 · 관련 영상만 나온 경우 표시하지 않아요.',
+       style:TextStyle(fontSize:12)),
      for(final x in list)RadioListTile<String>(dense:true,contentPadding:EdgeInsets.zero,
       title:Text('${x.source}: ${x.url}',maxLines:2,overflow:TextOverflow.ellipsis),
       subtitle:Text(x.evidence,style:const TextStyle(fontSize:12)),
@@ -245,7 +266,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
     if(message.isNotEmpty)SelectableText(message,style:const TextStyle(fontSize:12)),
     const Divider(height:32),
     Text('이번 선정 ${selected.length}개',style:const TextStyle(fontWeight:FontWeight.bold,fontSize:18)),
-         const Text('여러 이미지에서 일치한 페이지를 우선 표시해요. 후보가 최초 제작자라고 확정되는 것은 아니에요.',
+         const Text('완전·부분 이미지 매칭을 구분하고, 서로 다른 3개 이상 장면에서 직접 일치할 때만 후보를 표시합니다. 최초 제작자임을 보장하지는 않아요.',
      style:TextStyle(fontSize:12)),
     for(final v in selected)candidateCard(v),
    ]));
