@@ -134,6 +134,13 @@ object BenchmarkFrameExtractor {
                 // first and last samples completely untrimmed.
                 val clean=centerCrop(frame)
                 try {
+                // Keep a separate uncropped snapshot for image-search apps.
+                // Vision continues to receive only the central action region.
+                val fullBuffer=ByteArrayOutputStream()
+                check(frame.compress(Bitmap.CompressFormat.JPEG,85,fullBuffer)){
+                    "전체 장면 JPEG 변환 실패"
+                }
+                val fullBytes=fullBuffer.toByteArray()
                 val buffer=ByteArrayOutputStream()
                 check(clean.compress(Bitmap.CompressFormat.JPEG,82,buffer)){"영상 장면을 JPEG로 변환하지 못했어요."}
                 val bytes=buffer.toByteArray()
@@ -141,6 +148,9 @@ object BenchmarkFrameExtractor {
                     result.add(mapOf("timeMs" to timeMs,
                         "crop" to true,
                         "content" to Base64.encodeToString(bytes,Base64.NO_WRAP),
+                        "originalContent" to if(fullBytes.size<=1000000)
+                            Base64.encodeToString(fullBytes,Base64.NO_WRAP)
+                            else Base64.encodeToString(bytes,Base64.NO_WRAP),
                         "hash" to perceptualHash(clean).first,
                         "contrast" to perceptualHash(clean).second))
                 }
