@@ -16,11 +16,11 @@ jobs:
           import zipfile,re
           z=zipfile.ZipFile('shorts-studio-source.zip')
           names=z.namelist()
-          for n in ['lib/tiktok_download.dart','lib/benchmark_stream.dart','lib/benchmark_ui.dart','lib/vision_reverse.dart','lib/benchmark_data.dart','lib/bridge.dart','lib/model.dart','lib/discovery.dart','lib/auto_batch.dart','native/android/MainActivity.kt','native/android/BenchmarkFrameExtractor.kt','tool/bootstrap.py','pubspec.yaml','native/android/build.gradle.kts','native/android/build.gradle','native/android/AndroidManifest.xml']:
+          for n in ['native/android/OriginalTextScanner.kt','native/android/dependencies.gradle.kts','lib/ai.dart','lib/tiktok_download.dart','lib/benchmark_stream.dart','lib/benchmark_ui.dart','lib/vision_reverse.dart','lib/benchmark_data.dart','lib/bridge.dart','lib/model.dart','lib/discovery.dart','lib/auto_batch.dart','native/android/MainActivity.kt','native/android/BenchmarkFrameExtractor.kt','tool/bootstrap.py','pubspec.yaml','native/android/build.gradle.kts','native/android/build.gradle','native/android/AndroidManifest.xml']:
             if n not in names:continue
             lines=z.read(n).decode('utf8').splitlines()
             print('===FILE',n,len(lines))
-            if n in ['lib/tiktok_download.dart','lib/benchmark_stream.dart','lib/vision_reverse.dart','lib/benchmark_data.dart','lib/bridge.dart','pubspec.yaml','native/android/BenchmarkFrameExtractor.kt']:
+            if n in ['native/android/OriginalTextScanner.kt','native/android/dependencies.gradle.kts','lib/tiktok_download.dart','lib/benchmark_stream.dart','lib/vision_reverse.dart','lib/benchmark_data.dart','lib/bridge.dart','pubspec.yaml','native/android/BenchmarkFrameExtractor.kt']:
               subset=range(min(len(lines),280))
             elif n=='lib/benchmark_ui.dart':
               subset=range(min(len(lines),205))
