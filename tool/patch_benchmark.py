@@ -18,7 +18,7 @@ for filename,source in [('lib/benchmark_data.dart','tool/benchmark_data.dart'),
  updates[filename]=Path(source).read_text(encoding='utf-8')
 main='lib/main.dart'
 edit(main,"import 'tiktok_download.dart';","import 'tiktok_download.dart';\nimport 'benchmark_ui.dart';")
-edit(main,"  Future<void> settings()async{","""  Future<void> benchmark() async {
+edit(main,"Future<void> settings()async{","""  Future<void> benchmark() async {
     if(busy||downloader!=null)return;
     await Navigator.push(context,MaterialPageRoute(builder:(_)=>BenchmarkScreen(
       clips:clips,onSave:()=>Native.save(clips))));
@@ -29,9 +29,9 @@ edit(main,
      "actions:[IconButton(tooltip:'유튜브 채널 설정',",
      "actions:[IconButton(tooltip:'벤치마킹 소재 탐색',onPressed:busy?null:benchmark,icon:const Icon(Icons.insights_outlined)),IconButton(tooltip:'유튜브 채널 설정',")
 editor='lib/editor.dart'
-edit(editor,"  const EditorScreen({super.key,required this.clip,required this.onSave});",
+edit(editor,"const EditorScreen({super.key,required this.clip,required this.onSave});",
      "  const EditorScreen({super.key,required this.clip,required this.onSave,this.autoGenerateOnOpen=false});")
-edit(editor,"  final Clip clip; final Future<void> Function() onSave;",
+edit(editor,"final Clip clip; final Future<void> Function() onSave;",
      "  final Clip clip; final Future<void> Function() onSave;\n  final bool autoGenerateOnOpen;")
 edit(editor,
      "player.addListener(tick);if(mounted)setState(()=>ready=true);",
@@ -42,7 +42,7 @@ edit(editor,
      }""")
 native='native/android/MainActivity.kt'
 edit(native,
-     '            "loadAiSettings" -> async(r)',
+     '"loadAiSettings" -> async(r)',
      '''            "benchmarkApiKey" -> r.success(readAiKey("youtubeBenchmark"))
             "saveBenchmarkApiKey" -> {
                 val key=call.argument<String>("key")?:""
