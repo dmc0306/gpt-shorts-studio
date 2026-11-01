@@ -1,3 +1,12 @@
+## 0.21.8 — 이미지 검색 엔진 한계에 대비한 영상 장면 Google Lens 검색 공유
+
+- 벤치마킹 쇼츠 실기기 검증에서 `Cloud Vision WEB_DETECTION` 결과가 0건이거나, 검색 웹페이지가 여러 개 발견되어도 실제 원본 게시물은 찾지 못하는 사례를 확인했습니다. 이는 웹 이미지 색인과 원본 동영상 색인이 별개이기 때문이며, 단순 점수·후보 개수 조정으로 원본 발견을 보장하지 않습니다.
+- 원클릭 벤치마킹 탐색 후 **'Cloud Vision 검색 장면' 이미지 각각을 터치하면 전체 원본 프레임을 Android 이미지 공유 화면으로 보냅니다.** Google Lens 등 이미지 검색 앱에서 배경·물체·인물 등 텍스트를 피한 영역을 선택해 검색할 수 있습니다. 일부 기기는 Lens가 공유 대상으로 직접 나오지 않을 수 있으니 Google 또는 사진 앱에서 Lens 검색을 선택합니다.
+- Vision API용 검색 이미지는 기존대로 중앙 크롭을 사용하고, **Lens 검색용에는 자르기 전 실제 프레임**을 전달합니다. 기기에서 공유할 때에만 cache/lens-frames 에 임시 JPEG를 저장하고 AndroidX FileProvider를 통해 읽기 권한을 제공합니다. 앱 내부 다른 파일에 접근할 수 없도록 해당 캐시 하위 경로만 허용합니다.
+- Android는 이미지 검색 앱 선택 및 검색 결과 확인이 필요합니다. **완전 무인 원본 자동 발굴 기능이 아니며, 정확한 원본 발견을 보장하지 않습니다.** 추가 유료 API 키는 사용하지 않습니다.
+- 기존 Cloud Vision 자동 탐색·후보 실제 영상 교차검증·자막 의심 검사·템플릿 편집 기능과 상위 50개 캐시는 유지합니다.
+- 소스: `tool/benchmark_ui.dart`, `tool/BenchmarkFrameExtractor.kt`, `native/android/MainActivity.kt`, `native/android/AndroidManifest.xml`, `native/android/benchmark_frame_paths.xml`; `tool/bootstrap.py` 이미지 공유용 리소스 설치. 패치 `tool/patch_lens_fallback.py`.
+
 ## 0.21.7 — 후보 검증 오류 처리 및 썸네일 사전 검사 안정화
 
 - 사용자 실기기 진단: 원본 후보 5건, 실제 영상 검사 4건 중 4건 모두 동영상 메타데이터·스트림 확보 오류(YouTube 연결 제한·TikTok 추출기 10204), 장면 불일치 0건, 자막 의심 0건. 즉 원본 판정 이전에 후보 접근이 막힌 상태.
