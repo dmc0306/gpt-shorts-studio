@@ -20,18 +20,18 @@ jobs:
           for n in names:
             if n.endswith((".dart",".yaml",".md")) and not n.startswith("test/"):
               print(n)
-          targets=("lib/main.dart","lib/home.dart","lib/bridge.dart","lib/ai_settings.dart","lib/model.dart","lib/collector.dart","lib/search.dart","lib/youtube.dart","lib/youtube_settings.dart","lib/youtube_channel.dart","lib/youtube_upload.dart","pubspec.yaml")
+          targets=("lib/model.dart","lib/discovery.dart","lib/discovery_store.dart","lib/auto_batch.dart","lib/ai.dart","lib/tiktok_download.dart","lib/editor.dart","lib/scene_selection.dart","lib/main.dart")
           for n in targets:
             if n not in names:continue
             lines=z.read(n).decode('utf-8').splitlines()
             print("SOURCE",n,"LINES",len(lines))
-            if n in ("lib/main.dart","lib/home.dart","lib/bridge.dart","lib/ai_settings.dart","pubspec.yaml"):
-              index=set(range(min(len(lines),220)))
+            if n in ("lib/model.dart","lib/discovery_store.dart","lib/discovery.dart","lib/tiktok_download.dart","lib/scene_selection.dart"):
+              index=set(range(min(len(lines),320)))
             else:
               index=set()
               for i,l in enumerate(lines):
                 if any(k in l.lower() for k in ("widget ","class ","future<","apikey","search","process","generate","file","import","video","navigator","build(")):
-                  index.update(range(max(0,i-2),min(len(lines),i+7)))
-            for i in sorted(index)[:370]:
-              print(f"{i+1:4d} | {lines[i][:240]}")
+                  index.update(range(max(0,i-2),min(len(lines),i+12)))
+            for i in sorted(index)[:220]:
+              print(f"{i+1:4d} | {lines[i][:600]}")
           PY
