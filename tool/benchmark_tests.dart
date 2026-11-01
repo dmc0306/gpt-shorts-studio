@@ -202,4 +202,15 @@ void main(){
    ])),false);
  });
 
+ test('Provider failure diagnostics avoid presenting raw TikTok HTML and remain concise',(){
+   final detail=CandidateFailure.describe(StateError('PAGE_UNAVAILABLE TikTok video api JSON 10204 '
+     '${List.filled(100,'html payload').join()}'));
+   expect(detail,contains('10204'));
+   expect(detail,isNot(contains('html payload')));
+   final denied=CandidateFailure.describe(StateError('HTTP 403 Forbidden'));
+   expect(denied,contains('403'));
+   final huge=CandidateFailure.describe(StateError(List.filled(400,'x').join()));
+   expect(huge.length,lessThan(220));
+ });
+
 }
