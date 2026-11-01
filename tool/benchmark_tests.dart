@@ -5,6 +5,7 @@ import 'package:http/testing.dart';
 import 'package:shorts_studio/benchmark_data.dart';
 import 'package:shorts_studio/vision_reverse.dart';
 import 'package:shorts_studio/benchmark_stream.dart';
+import 'package:shorts_studio/benchmark_oneclick.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
 void main(){
@@ -126,4 +127,49 @@ void main(){
  test('Video-only stream size cap prevents oversized temporary cache',(){
    expect(BenchmarkStreamResolver.maxBytes,lessThan(100*1024*1024));
  });
+ test('Vision accepts a single direct image match only as an unverified lead',(){
+   final suggestions=FrameReverseSearch.discoveryCandidates([
+     {'webDetection':{'pagesWithMatchingImages':[
+       {'url':'https://www.tiktok.com/@creator/video/123456',
+        'fullMatchingImages':[{'url':'https://cdn.example.com/abc.jpg'}]},
+       {'url':'https://www.youtube.com/watch?v=12345678901'}]}}
+   ],'ABCDEFGHIJK');
+   expect(suggestions.length,2);
+   expect(suggestions.first.source,'역이미지 탐색 후보');
+   expect(suggestions.first.evidence,contains('원본 확정 아님'));
+ });
+ test('Visual verification requires distinct matching reference and candidate scenes',(){
+   final reference=[
+     {'hash':'aaaaaaaaaaaaaaaa','contrast':38},
+     {'hash':'5555555555555555','contrast':52},
+   ];
+   final candidate=[
+     {'hash':'aaaaaaaaaaaaaaaa','contrast':38},
+     {'hash':'5555555555555555','contrast':52},
+     {'hash':'0000000000000000','contrast':53},
+   ];
+   final verified=VideoMatch.match(reference,candidate);
+   expect(verified.matched,2);
+   expect(verified.distinctCandidate,2);
+   expect(verified.best,0);
+   expect(VideoMatch.strong(verified),true);
+   final single=VideoMatch.match(reference,[candidate.first]);
+   expect(VideoMatch.strong(single),false);
+ });
+ test('Scene similarity alone does not prove an original with inserted captions',(){
+   final overlay=<String,dynamic>{'lines':[
+     for(final t in [1,2,3,4])
+       {'x':.12,'y':.81,'w':.56,'letters':7,'time':t,'watermark':false}
+   ]};
+   expect(OverlayCheck.suspicious(overlay),true);
+   expect(OverlayCheck.suspicious({'lines':[
+     {'x':.2,'y':.43,'w':.3,'letters':6,'time':1},
+   ]}),false);
+   expect(OverlayCheck.suspicious({}),true);
+ });
+ test('YouTube original candidate links are strictly video IDs',(){
+   expect(OneClickExplorer.youtubeId('https://www.youtube.com/shorts/AbcDefGhI12'),'AbcDefGhI12');
+   expect(OneClickExplorer.youtubeId('https://www.youtube.com/@anyone'),null);
+ });
+
 }
