@@ -33,7 +33,7 @@ handler='''            "benchmarkFingerprintImage" -> async(r) {
 '''
 changes[native]=code.replace(anchor,handler+anchor,1).encode('utf8')
 assert b'CandidateThumbnail' in changes['lib/benchmark_oneclick.dart']
-assert b'후보 게시물 열어보기' in changes['lib/benchmark_ui.dart']
+assert '후보 게시물 열어보기' in changes['lib/benchmark_ui.dart'].decode('utf8')
 assert b'fingerprintJpeg' in changes['native/android/BenchmarkFrameExtractor.kt']
 with ZipFile(output,'w') as z:
     for info,content in entries:
