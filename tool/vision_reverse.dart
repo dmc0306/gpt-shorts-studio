@@ -10,39 +10,58 @@ class FrameReverseSearch {
   final http.Client _client;
   void close()=>_client.close();
 
+
+  /// Precision-first matching. A web page listed in pagesWithMatchingImages
+  /// alone is not evidence that the linked social video is the same video.
+  /// Demand page-local full/partial image matches at 3 distinct time points,
+  /// including >=1 full match. Otherwise return an honest empty result.
   static List<BenchOrigin> rank(Object? value,String benchmarkId){
     if(value is! List)throw const FormatException('Vision 응답 목록이 올바르지 않아요.');
-    final scores=<String,double>{},times=<String,Set<int>>{};
-    for(var i=0;i<value.length;i++){
-      final result=value[i];
-      if(result is! Map)continue;
-      if(result['error'] is Map){
-        final error=result['error'] as Map;
+    final evidence=<String,Map<int,int>>{};
+    for(var index=0;index<value.length;index++){
+      final response=value[index];
+      if(response is! Map)continue;
+      if(response['error'] is Map){
+        final error=response['error'] as Map;
         throw StateError('Vision WEB_DETECTION 오류 · 코드 ${error['code']??'unknown'}');
       }
-      final web=result['webDetection'];
+      final web=response['webDetection'];
       if(web is! Map)continue;
       final pages=web['pagesWithMatchingImages'];
       if(pages is! List)continue;
-      final urls=<String>{};
-      for(final p in pages){
-        if(p is! Map)continue;
-        final u=normalOrigin(p['url'] as String? ?? '');
-        if(u==null||!urls.add(u))continue;
-        if(u.contains('/watch?v=$benchmarkId')||u.contains('/shorts/$benchmarkId'))continue;
-        final score=(p['score'] as num? ?? 0.0).toDouble().clamp(0.0,3.0);
-        scores[u]=(scores[u]??0)+1.0+score;
-        times.putIfAbsent(u,()=>{}).add(i);
+      for(final page in pages){
+        if(page is! Map)continue;
+        final url=normalOrigin(page['url'] as String? ?? '');
+        if(url==null)continue;
+        final uri=Uri.tryParse(url);
+        if(uri!=null && ((uri.path=='/watch'&&uri.queryParameters['v']==benchmarkId)||
+            uri.path=='/shorts/$benchmarkId'))continue;
+        final full=page['fullMatchingImages'];
+        final partial=page['partialMatchingImages'];
+        final exact=full is List&&full.any((image)=>image is Map&&image['url'] is String);
+        final cropped=partial is List&&partial.any((image)=>image is Map&&image['url'] is String);
+        if(!exact&&!cropped)continue; // Page relation alone is insufficient.
+        final category=exact?2:1;
+        final moments=evidence.putIfAbsent(url,()=>{});
+        if(category>(moments[index]??0))moments[index]=category;
       }
     }
-    final urls=scores.keys.toList()..sort((a,b){
-      final byFrame=(times[b]?.length??0).compareTo(times[a]?.length??0);
-      return byFrame!=0?byFrame:(scores[b]??0).compareTo(scores[a]??0);
+    final qualified=evidence.entries.where((entry){
+      final frames=entry.value;
+      return frames.length>=3 && frames.values.any((level)=>level==2);
+    }).toList();
+    qualified.sort((a,b){
+      final fullA=a.value.values.where((n)=>n==2).length;
+      final fullB=b.value.values.where((n)=>n==2).length;
+      final byFull=fullB.compareTo(fullA);
+      return byFull!=0?byFull:b.value.length.compareTo(a.value.length);
     });
-    return urls.take(30).map((url){
-      final count=times[url]!.length;
-      return BenchOrigin(url,'서로 다른 이미지 $count장과 일치하는 웹페이지 · 원제작 여부는 추가 확인 필요',
-        '프레임 역이미지 검색');
+    return qualified.take(12).map((entry){
+      final count=entry.value.length;
+      final fullCount=entry.value.values.where((n)=>n==2).length;
+      return BenchOrigin(entry.key,
+        '서로 다른 $count개 시점에서 직접 이미지 매칭 (완전 일치 $fullCount개 시점) · 실제 동일 영상 여부는 확인 필요',
+        '직접일치 교차검증 v2');
     }).toList();
   }
 
