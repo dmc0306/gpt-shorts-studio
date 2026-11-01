@@ -58,10 +58,11 @@ class BenchState {
   final top=<String,List<BenchVideo>>{},scanned=<String,int>{},complete=<String,bool>{};
   final seen=<String>{},selected=<String>[];
   final origins=<String,List<BenchOrigin>>{},chosen=<String,String>{},rights=<String,String>{},proof=<String,String>{};
+  final diagnostics=<String,String>{};
   Map<String,dynamic> toJson()=>{'channels':channels,'top':top.map((k,v)=>MapEntry(k,v.map((e)=>e.toJson()).toList())),
     'scanned':scanned,'complete':complete,'seen':seen.toList(),'selected':selected,
     'origins':origins.map((k,v)=>MapEntry(k,v.map((e)=>e.toJson()).toList())),
-    'chosen':chosen,'rights':rights,'proof':proof};
+    'chosen':chosen,'rights':rights,'proof':proof,'diagnostics':diagnostics};
   factory BenchState.fromJson(Map raw){
     final b=BenchState();
     if(raw['channels'] is Map){b.channels.clear();(raw['channels'] as Map).forEach((k,v){if(k is String&&v is String&&RegExp(r'^UC[\w-]{22}$').hasMatch(k))b.channels[k]=v;});}
@@ -74,6 +75,11 @@ class BenchState {
     for(final pair in [(raw['chosen'],b.chosen),(raw['rights'],b.rights),(raw['proof'],b.proof)]){
       final source=pair.$1,target=pair.$2;
       if(source is Map)source.forEach((k,v){if(k is String&&v is String)target[k]=v;});
+    }
+    if(raw['diagnostics'] is Map){
+      (raw['diagnostics'] as Map).forEach((k,v){
+        if(k is String&&v is String)b.diagnostics[k]=v;
+      });
     }
     return b;
   }
