@@ -1,0 +1,25 @@
+name: Apply redirect trace patch
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tool/patch_oauth_trace.py'
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Patch checked source ZIP
+        run: python3 tool/patch_oauth_trace.py
+      - name: Commit patched source ZIP
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add shorts-studio-source.zip
+          git diff --cached --quiet && { echo "Source was not changed"; exit 1; }
+          git commit -m "Record safe OAuth redirect receipt and distinguish canceled authorization"
+          git push
