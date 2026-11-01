@@ -6,6 +6,22 @@ import re,os
 zip_path=Path('shorts-studio-source.zip');out=zip_path.with_suffix('.benchmark.zip')
 with ZipFile(zip_path) as zin: entries=[(i,zin.read(i)) for i in zin.infolist()]
 base={i.filename:b for i,b in entries};updates={}
+# On subsequent runs refresh only the new feature files; keep core native/editor intact.
+if 'lib/benchmark_data.dart' in base:
+    for name,source in [('lib/benchmark_data.dart','tool/benchmark_data.dart'),
+                        ('lib/benchmark_ui.dart','tool/benchmark_ui.dart'),
+                        ('test/benchmark_test.dart','tool/benchmark_tests.dart')]:
+        updates[name]=Path(source).read_text(encoding='utf-8')
+    ver=base['pubspec.yaml'].decode('utf-8')
+    if 'version: 0.20.0+53' in ver:
+        updates['pubspec.yaml']=ver.replace('version: 0.20.0+53','version: 0.20.1+54',1)
+    with ZipFile(out,'w') as zout:
+        for info,content in entries:
+            changed=updates.get(info.filename)
+            zout.writestr(info,changed.encode('utf-8') if changed is not None else content)
+    os.replace(out,zip_path)
+    print('Refreshed benchmark sources and regression tests.')
+    raise SystemExit(0)
 def edit(path,old,new):
  s=updates.get(path,base[path].decode('utf-8'))
  count=s.count(old)
