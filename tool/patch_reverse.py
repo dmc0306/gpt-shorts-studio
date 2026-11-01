@@ -14,6 +14,13 @@ def original(path):
 def change(path,a,b):
     s=original(path)
     n=s.count(a)
+    if n!=1:
+        # Existing source often uses two-space indentation; tolerate only a
+        # unique exact match after stripping the first line's left padding.
+        stripped=a.lstrip(' ')
+        if stripped!=a and s.count(stripped)==1:
+            a=stripped
+            n=1
     if n!=1:raise RuntimeError(f'{path}: expected one anchor, got {n}: {a[:90]!r}')
     updates[path]=s.replace(a,b,1)
 
