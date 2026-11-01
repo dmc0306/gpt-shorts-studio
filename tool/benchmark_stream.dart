@@ -12,6 +12,9 @@ class BenchmarkStreamError implements Exception {
 class BenchmarkStreamResolver {
   BenchmarkStreamResolver({YoutubeExplode? client}):_youtube=client??YoutubeExplode();
   final YoutubeExplode _youtube;
+  bool _cancelled=false;
+  void cancel(){_cancelled=true;_youtube.close();}
+  void _check(){if(_cancelled)throw const BenchmarkStreamError('사용자가 스트림 검색을 중단했어요.');}
   static const maxBytes=80*1024*1024;
 
   static VideoOnlyStreamInfo choose(List<VideoOnlyStreamInfo> streams) {
@@ -45,11 +48,14 @@ class BenchmarkStreamResolver {
       throw const BenchmarkStreamError('임시 영상 저장 경로가 올바르지 않아요.');
     }
     RandomAccessFile? handle;
+    final deadline=Timer(const Duration(seconds:85),cancel);
     final file=File(output),partial=File('$output.part');
     try {
+      _check();
       status('영상 스트림 형식 확인 중');
       final manifest=await _youtube.videos.streams.getManifest(videoId)
         .timeout(const Duration(seconds:35));
+      _check();
       final selected=choose(manifest.videoOnly);
       final resolution=selected.videoResolution;
       status('영상 스트림 수신 · ${resolution.width}×${resolution.height}');
@@ -58,10 +64,12 @@ class BenchmarkStreamResolver {
       var bytes=0;
       await for(final chunk in _youtube.videos.streams.get(selected)
           .timeout(const Duration(seconds:45))) {
+        _check();
         bytes+=chunk.length;
         if(bytes>maxBytes)throw const BenchmarkStreamError('프레임 탐색용 영상 80MB 제한을 넘었어요.');
         await handle.writeFrom(chunk);
       }
+      _check();
       await handle.flush();
       await handle.close();handle=null;
       if(bytes<10240)throw const BenchmarkStreamError('영상 스트림 데이터가 충분하지 않아요.');
@@ -71,9 +79,11 @@ class BenchmarkStreamResolver {
     } on BenchmarkStreamError {
       rethrow;
     } catch (_) {
+      if(_cancelled)throw const BenchmarkStreamError('스트림 연결이 취소되었거나 85초 제한을 초과했어요.');
       throw const BenchmarkStreamError(
         'YouTube 영상 스트림을 받지 못했어요. 일부 영상의 재생 검증 또는 접속 제한 때문일 수 있어요. 직접 파일 선택으로 재시도해 주세요.');
     } finally {
+      deadline.cancel();
       if(handle!=null)await handle.close();
       if(await partial.exists())await partial.delete();
       _youtube.close();
