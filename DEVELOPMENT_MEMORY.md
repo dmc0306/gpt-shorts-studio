@@ -1,3 +1,8 @@
+## 0.17.1 — Keep authentication settings usable after cancellation
+
+- Initial 0.17.0 Actions analysis/tests/APK/signature passed. Final review caught an over-broad text edit disposing the server field controllers in the cancel callback. Removed it and added a UI test that cancels then edits the server address. Only screen disposal releases controllers.
+- Label legacy PC connection explicitly so its ADB requirement cannot be confused with the primary server mode.
+
 ## 0.17.0 — HTTPS server authentication
 
 - User requested a continuously available authentication server instead of the PC broker. Added single-owner Docker/Caddy service using the shared PKCE/state/channel validation protocol with configurable HTTPS callback and server identity namespace.
