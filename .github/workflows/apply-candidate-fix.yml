@@ -1,0 +1,25 @@
+name: Apply repaired candidate thumbnail verifier
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/apply-candidate-fix.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Patch complete thumbnail verifier
+        run: python3 tool/patch_candidate_fix.py
+      - name: Commit source app archive
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add shorts-studio-source.zip
+          git diff --cached --quiet && { echo "No changes"; exit 1; }
+          git commit -m "Restore thumbnail verifier and validate v0.21.6"
+          git push
