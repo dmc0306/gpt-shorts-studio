@@ -1,3 +1,10 @@
+## 0.19.2 — OAuth 콜백 수신 확인 진단 (사용자 기기 type 0 code 1 대응)
+
+- 0.19.1의 Chrome 탭에서도 브랜드 채널 선택과 동의 후 `AUTH_CHROME_AUTHORIZE (OAuth 유형 0 · 코드 1)`이 재현됨. AppAuth에서 이는 USER_CANCELED_AUTH_FLOW로 정의되지만 실제 사용자의 취소를 증명하지는 않음.
+- Android 커스텀 URI 콜백 수신 Activity를 별도로 기록해, 인증 URI/토큰/상태값을 저장하지 않고 복귀 **수신 여부**, **경로 일치**, **code/error 파라미터 존재 여부**만 로컬에 기록.
+- 다음 실패부터 `AUTH_CHROME_REDIRECT_MISSING`(Android에서 복귀 수신 못 함)과 `AUTH_CHROME_AFTER_REDIRECT`(복귀 수신했으나 AppAuth 취소)를 구분함. 설정 화면에 최근 콜백 상태 표시. 앱 재진입 후에도 진단 값 유지.
+- 기기 검증 전에는 Google OAuth 인증 완료라고 단정하지 않음. 앱 소스: `shorts-studio-source.zip`. 구성: `YOUTUBE_CHROME_AUTH.md` (ZIP 안).
+
 ## 0.19.1 — Chrome 인증 복귀 실패 진단 및 Chrome 탭 대안
 
 - Google 브랜드 채널 동의 후 Chrome에서 앱 복귀에 실패하며 `AUTH_CHROME_AUTHORIZE`로만 보이던 문제를 구분합니다. 응답 Intent가 없으면 이제 `AUTH_CHROME_NO_RESULT`로 표시하고, OAuth 예외가 있으면 안전한 정수 유형/코드만 제공합니다. 토큰·전체 URL·인증 코드는 공개하지 않습니다.
