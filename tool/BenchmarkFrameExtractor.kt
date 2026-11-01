@@ -46,17 +46,22 @@ object BenchmarkFrameExtractor {
             val frame=media.getScaledFrameAtTime(timeMs*1000L,
                 MediaMetadataRetriever.OPTION_CLOSEST_SYNC,720,720) ?: return@forEachIndexed
             try {
-                val trim=index in 1..4 && frame.height>100
-                val cutTop=if(trim) (frame.height*.12).toInt() else 0
+                // All frames: trim persistent subtitle/title overlays before
+                // sending images to Cloud Vision; previous code left the
+                // first and last samples completely untrimmed.
+                val portrait=frame.height>frame.width
+                val cutTop=(frame.height*(if(portrait)0.18 else 0.10)).toInt()
+                val cutLeft=(frame.width*(if(portrait)0.06 else 0.04)).toInt()
                 val cutHeight=frame.height-2*cutTop
-                val clean=if(trim) Bitmap.createBitmap(frame,0,cutTop,frame.width,cutHeight) else frame
+                val cutWidth=frame.width-2*cutLeft
+                val clean=Bitmap.createBitmap(frame,cutLeft,cutTop,cutWidth,cutHeight)
                 try {
                 val buffer=ByteArrayOutputStream()
                 check(clean.compress(Bitmap.CompressFormat.JPEG,82,buffer)){"영상 장면을 JPEG로 변환하지 못했어요."}
                 val bytes=buffer.toByteArray()
                 if(bytes.size in 100..1000000) {
                     result.add(mapOf("timeMs" to timeMs,
-                        "crop" to trim,
+                        "crop" to true,
                         "content" to Base64.encodeToString(bytes,Base64.NO_WRAP)))
                 }
                 } finally {
