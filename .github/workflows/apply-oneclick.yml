@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/apply-oneclick.yml'
+      - 'tool/patch_oneclick.py'
 permissions:
   contents: write
 jobs:
