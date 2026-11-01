@@ -111,6 +111,7 @@ class OneClickExplorer {
   Future<CandidateCheck> inspect(BenchOrigin origin,List<dynamic> reference)async{
     String? path;
     Clip? downloaded;
+    var retainDownloaded=false;
     final id=youtubeId(origin.url);
     try{
       if(id!=null){
@@ -144,15 +145,16 @@ class OneClickExplorer {
       if(OverlayCheck.suspicious(raw['text'] as Map)){
         return CandidateCheck(origin,'overlay','영상은 일치하지만 기존 자막·상단 제목이 의심돼 제외합니다.');
       }
+      retainDownloaded=true;
       return CandidateCheck(origin,'checked',
         '실제 영상 ${match.matched}개 장면 교차일치 · 자막 의심 신호 미검출 (수동 최종 확인 권장)',
         clip:downloaded);
     }catch(e){
       return CandidateCheck(origin,'error','후보 영상 확인 실패: $e');
     }finally{
-      if(downloaded!=null){
-        // Retain only a verified candidate for editor handoff.
-        // Unverified downloaded originals are cleaned by caller.
+      if(downloaded!=null&&!retainDownloaded){
+        try{await Native.call('deleteLocalVideo',
+          {'paths':[downloaded.path,downloaded.thumbnail]});}catch(_){}
       }
       if(id!=null&&path!=null){
         try{final f=File(path);if(await f.exists())await f.delete();}catch(_){}
