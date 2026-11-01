@@ -1,3 +1,13 @@
+## 0.20.2 — 주요 장면 역이미지 검색으로 원본 탐색 변경
+
+- **기존 설명란 출처 자동 추출 및 Tavily 제목 기반 원본 검색 제거.** Google Cloud Vision `WEB_DETECTION` 이미지 검색만 사용합니다.
+- Shorts 벤치마킹 영상의 **실제 영상 파일을 Android 파일 선택기로 고른 뒤**, 휴대폰에서 6개 시점의 프레임을 추출합니다. 중간 프레임은 상하단 오버레이가 개입할 가능성을 줄이기 위해 일부 크롭합니다. 파일·장면은 앱의 검색 기록에 저장하지 않고 이미지 데이터만 Vision API로 보냅니다.
+- `pagesWithMatchingImages` 가운데 TikTok, Instagram, YouTube의 **개별 영상/게시물 URL**만 수집하며, 여러 프레임에 반복적으로 나타난 페이지를 우선 표시합니다. 이 방법은 이미지의 일치 웹페이지를 찾는 것이며 반드시 최초 제작자라는 증명은 아닙니다.
+- Google Vision API 키는 별도로 Android Keystore 암호화 저장하거나, Cloud Vision 허용된 YouTube Data API 키를 재사용할 수 있습니다. Google Cloud Vision API 활성화 및 과금 설정이 필요할 수 있습니다.
+- 원본 재사용 허가 및 라이선스 확인 입력 필드를 화면에서 제거했습니다. 사용자가 원본 후보를 선택하면 기존 파일 가져오기 또는 TikTok 원본 가져오기로 이동하고 기존 AI 편집기·MP4 내보내기를 그대로 사용합니다.
+- 기존 벤치마킹 상위 50개 캐시 및 중복 없는 랜덤 추첨은 유지합니다. **YouTube Data API는 영상 프레임을 제공하지 않기 때문에**, 영상 파일 선택 없이 자동 이미지 검색이 가능한 것처럼 표시하지 않습니다.
+- `lib/vision_reverse.dart`, `native/android/BenchmarkFrameExtractor.kt`, `test/benchmark_test.dart`에 구현/테스트가 추가됐습니다. 실제 기기 Cloud Vision 매칭 정확도는 아직 측정 전입니다.
+
 ## 0.20.1 — 벤치마킹 신규 화면 컴파일 수정
 - `BenchState()` 생성자와 벤치마킹 카드 위젯의 괄호 오류 수정. 신규 데이터/화면/테스트 소스를 기존 ZIP에 반영.
 - 검증은 GitHub Actions의 `flutter analyze`, `flutter test`, Android 고정 서명 APK 빌드, 인증서 검사까지 모두 통과해야 완료로 판단합니다.
