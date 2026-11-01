@@ -1,0 +1,23 @@
+name: Inspect Android bootstrap resources
+on:
+  push:
+    paths: ['.github/workflows/inspect-bootstrap-res.yml']
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect bootstrap source mapping
+        run: |
+          python3 - <<'PY'
+          import zipfile
+          z=zipfile.ZipFile('shorts-studio-source.zip')
+          print("ANDROID PATHS")
+          print("\n".join(x for x in z.namelist() if 'native/android' in x and ('res/' in x or 'build.gradle' in x))[:4000])
+          t=z.read('tool/bootstrap.py').decode()
+          print('BOOTSTRAP',len(t))
+          for i,line in enumerate(t.splitlines()):
+             if any(x in line for x in ['native/android', 'res/', 'AndroidManifest', 'kotlin/', 'build.gradle']):
+                 print(i+1,line[:250])
+          PY
