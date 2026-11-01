@@ -1,6 +1,7 @@
 ## 0.17.1 — Keep authentication settings usable after cancellation
 
 - Initial 0.17.0 Actions analysis/tests/APK/signature passed. Final review caught an over-broad text edit disposing the server field controllers in the cancel callback. Removed it and added a UI test that cancels then edits the server address. Only screen disposal releases controllers.
+- CI 41280729760: 101 Flutter tests passed, new cancel-settings UI test failed because scrollUntilVisible matched multiple Scrollables (outer ListView and inner text-field scroll views). Target the outer Scrollable explicitly; do not remove the cancellation/edit regression.
 - Label legacy PC connection explicitly so its ADB requirement cannot be confused with the primary server mode.
 
 ## 0.17.0 — HTTPS server authentication
