@@ -1,3 +1,11 @@
+## 0.19.3 — Android OAuth 직접 복귀 처리
+
+- 실제 휴대폰에서 Google 인증 코드가 Android 커스텀 URI 수신 Activity까지 정상 도착함을 0.19.2로 검증했으나, AppAuth 인증 관리 Activity는 `USER_CANCELED_AUTH_FLOW`를 반환함.
+- Chrome에서 Google 계정/브랜드 채널 선택과 승인은 그대로 사용. **AppAuth AuthorizationManagementActivity를 우회**하고 OAuth 요청 URI를 Chrome 또는 Chrome Custom Tab으로 직접 열며, 앱 수신 Activity가 복귀 URI를 기존 MainActivity에 명시적으로 전달함.
+- 요청 시 `state` 및 S256 PKCE verifier가 포함된 AuthorizationRequest를 Android Keystore로 암호화 저장하고, 복귀 시 client ID, redirect URI, state, 인증 코드 존재를 검증하여 AppAuth 토큰 교환·암호화 저장을 수행함. 원본 OAuth URI/코드/토큰을 로그 또는 UI에 노출하지 않음.
+- 기존 채널 ID 대조, 사용자 확인, 인증 갱신 검사, 자동 업로드 보호장치는 유지함. 변경 코드/회귀 검사 후 실제 휴대폰에서 인증 복귀를 다시 검증해야 함.
+- 앱 소스 ZIP: `shorts-studio-source.zip`; 신규 패치 코드: `tool/patch_oauth_direct.py`; 상세 기술 기록은 소스 ZIP 안의 `YOUTUBE_CHROME_AUTH.md`에 있음.
+
 ## 0.19.2 — OAuth 콜백 수신 확인 진단 (사용자 기기 type 0 code 1 대응)
 
 - 0.19.1의 Chrome 탭에서도 브랜드 채널 선택과 동의 후 `AUTH_CHROME_AUTHORIZE (OAuth 유형 0 · 코드 1)`이 재현됨. AppAuth에서 이는 USER_CANCELED_AUTH_FLOW로 정의되지만 실제 사용자의 취소를 증명하지는 않음.
