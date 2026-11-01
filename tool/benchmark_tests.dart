@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shorts_studio/benchmark_data.dart';
+import 'package:shorts_studio/vision_reverse.dart';
 
 void main(){
  test('Video length parser and Shorts candidate bounds',(){
@@ -73,12 +74,39 @@ void main(){
    final restored=BenchState.fromJson(s.toJson());
    expect(restored.seen,containsAll(['v1','v2']));
  });
- test('Description credit is only a candidate and does not prove rights',(){
-   const v=BenchVideo('id','ch','c','title',
-    'Creator https://www.tiktok.com/@a/video/12345 another https://www.tiktok.com/@a',
-    500,30,'');
-   final candidates=BenchFinder.credits(v);
-   expect(candidates.length,1);
-   expect(candidates.single.source,'설명란');
+
+ test('Frames matching the same original rank higher, benchmark itself excluded',(){
+   final matches=FrameReverseSearch.rank([
+     {'webDetection':{'pagesWithMatchingImages':[
+       {'url':'https://www.tiktok.com/@original/video/123456','score':.8},
+       {'url':'https://www.youtube.com/watch?v=benchmark'}]}},
+     {'webDetection':{'pagesWithMatchingImages':[
+       {'url':'https://www.tiktok.com/@original/video/123456','score':.2},
+       {'url':'https://www.tiktok.com/@other/video/345','score':1.0}]}}
+   ],'benchmark');
+   expect(matches.length,2);
+   expect(matches.first.url,contains('original'));
+   expect(matches.first.evidence,contains('2장'));
  });
+ test('Vision sends only images without title, description or Tavily',()async{
+   final client=MockClient((request)async{
+     expect(request.url.host,'vision.googleapis.com');
+     expect(request.url.queryParameters['key'],'vision-key');
+     final data=jsonDecode(request.body) as Map;
+     expect(data.keys.toList(),['requests']);
+     final requests=data['requests'] as List;
+     expect(requests.length,2);
+     expect(jsonEncode(requests),contains('WEB_DETECTION'));
+     expect(jsonEncode(requests),isNot(contains('Tavily')));
+     return http.Response(jsonEncode({'responses':[
+       {'webDetection':{'pagesWithMatchingImages':[{'url':'https://www.youtube.com/shorts/AbCdEfGhijk'}]}},
+       {'webDetection':{'pagesWithMatchingImages':[{'url':'https://www.youtube.com/shorts/AbCdEfGhijk'}]}}
+     ]}),200);
+   });
+   final engine=FrameReverseSearch('vision-key',client:client);
+   final results=await engine.find('reference',[{'content':'A'*150},{'content':'B'*150}]);
+   expect(results.single.evidence,contains('2장'));
+   engine.close();
+ });
+
 }

@@ -142,38 +142,3 @@ class BenchApi {
     return(top:videos.take(50).toList(),scanned:ids.length,complete:next==null,name:name);
   }
 }
-class BenchFinder {
-  BenchFinder({http.Client? client}):client=client??http.Client();
-  final http.Client client;
-  void close()=>client.close();
-  static List<BenchOrigin> credits(BenchVideo v){
-    final urls=<String>{};
-    for(final m in RegExp(r'https://[^\s<>"\u0027]+').allMatches(v.description)){
-      final url=normalOrigin(m.group(0)!);
-      if(url!=null)urls.add(url);
-    }
-    return [for(final u in urls)BenchOrigin(u,'벤치마킹 영상의 설명란 링크 · 원작자 확인 필요','설명란')];
-  }
-  Future<List<BenchOrigin>> find(BenchVideo v,String tavily)async{
-    final list=credits(v),urls=list.map((c)=>c.url).toSet();
-    if(tavily.isEmpty)return list;
-    final title=v.title.replaceAll(RegExp(r'[#"]'),' ').trim();
-    if(title.isEmpty)return list;
-    for(final domain in ['tiktok.com','instagram.com','youtube.com']){
-      final res=await client.post(Uri.https('api.tavily.com','/search'),
-        headers:{'Authorization':'Bearer $tavily','Content-Type':'application/json'},
-        body:jsonEncode({'query':'"$title" original creator site:$domain',
-          'search_depth':'basic','max_results':8,'include_domains':[domain],
-          'include_answer':false,'include_raw_content':false,'include_images':false}))
-        .timeout(const Duration(seconds:30));
-      if(res.statusCode!=200)throw StateError('Tavily 원본 검색 HTTP ${res.statusCode}');
-      final data=jsonDecode(res.body);
-      for(final x in (data is Map ? data['results'] as List? ?? [] : [])){
-        if(x is! Map)continue;
-        final url=normalOrigin(x['url'] as String? ?? '');
-        if(url!=null&&url!=v.url&&urls.add(url))list.add(BenchOrigin(url,'제목 기반 검색 후보 · 최초 제작 여부 확인 안 됨','Tavily'));
-      }
-    }
-    return list.take(30).toList();
-  }
-}

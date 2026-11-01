@@ -5,6 +5,7 @@ import 'bridge.dart';
 import 'editor.dart';
 import 'model.dart';
 import 'tiktok_download.dart';
+import 'vision_reverse.dart';
 
 class BenchmarkScreen extends StatefulWidget {
  const BenchmarkScreen({super.key,required this.clips,required this.onSave});
@@ -12,19 +13,24 @@ class BenchmarkScreen extends StatefulWidget {
  @override State<BenchmarkScreen> createState()=>_BenchmarkState();
 }
 class _BenchmarkState extends State<BenchmarkScreen>{
- final keyText=TextEditingController(),channelText=TextEditingController(),originText=TextEditingController();
+ final keyText=TextEditingController(),visionKeyText=TextEditingController(),channelText=TextEditingController(),originText=TextEditingController();
  BenchState state=BenchState();
- String tavily='',message='';
+ String message='';
  bool busy=false,loading=true;
  @override void initState(){super.initState();load();}
- @override void dispose(){keyText.dispose();channelText.dispose();originText.dispose();super.dispose();}
+ @override void dispose(){keyText.dispose();visionKeyText.dispose();channelText.dispose();originText.dispose();super.dispose();}
  Future<void> load()async{
   try{
    final raw=await Native.call<String>('loadBenchmarkState');
    if(raw!=null&&raw.isNotEmpty)state=BenchState.fromJson(jsonDecode(raw) as Map);
    keyText.text=await Native.call<String>('benchmarkApiKey')??'';
-   final settings=await Native.call<Map<dynamic,dynamic>>('loadAiSettings')??{};
-   tavily=settings['searchKey'] as String? ?? '';
+   visionKeyText.text=await Native.call<String>('benchmarkVisionKey')??'';
+   // Expire the previous text-search origin suggestions; keep user-added links.
+   for(final id in state.origins.keys.toList()){
+     state.origins[id]=state.origins[id]!.where((c)=>
+       c.source=='프레임 역이미지 검색'||c.source=='직접 추가').toList();
+     if(!state.origins[id]!.any((c)=>c.url==state.chosen[id]))state.chosen.remove(id);
+   }
   }catch(_){message='이전 소재 기록을 불러오지 못했어요.';}
   if(mounted)setState(()=>loading=false);
  }
@@ -52,13 +58,31 @@ class _BenchmarkState extends State<BenchmarkScreen>{
    report('$ok개 채널 분석 성공. 최신 조회수 상위 50개씩 저장했어요. 일부 수집된 채널은 결과가 불완전할 수 있어요.');
   }finally{client.close();}
  });
- Future<void> search(BenchVideo v)async=>run(()async{
-  report('${v.title} · 원본 후보 탐색 중');
-  final service=BenchFinder();
-  try{state.origins[v.id]=await service.find(v,tavily);
-   report('${state.origins[v.id]!.length}개 원본 후보. 실제 원제작자 여부와 사용 권한은 직접 확인해야 해요.');
-  }finally{service.close();}
- });
+ Future<void> search(BenchVideo v)async{
+  if(busy)return;
+  if(visionKeyText.text.trim().isEmpty && keyText.text.trim().isEmpty){
+    report('Cloud Vision API 키를 먼저 입력하세요. YouTube 키도 Vision API를 허용한다면 재사용할 수 있어요.');
+    return;
+  }
+  List<dynamic>? frames;
+  try{
+    frames=await Native.call<List<dynamic>>('benchmarkPickFrames');
+  }catch(e){report('벤치마킹 영상 파일에서 장면을 추출하지 못했어요: $e');return;}
+  if(frames==null){report('영상 파일 선택을 취소했어요.');return;}
+  await run(()async{
+   report('${v.title} · 실제 영상 프레임 ${frames!.length}장 이미지 검색 중');
+   final key=visionKeyText.text.trim().isNotEmpty?visionKeyText.text.trim():keyText.text.trim();
+   final service=FrameReverseSearch(key);
+   try{
+     final candidates=await service.find(v.id,frames!);
+     state.origins[v.id]=candidates;
+     state.chosen.remove(v.id);
+     report(candidates.isEmpty
+      ?'영상 장면과 일치하는 소셜 영상 페이지를 찾지 못했어요. 다른 프레임이 포함된 영상을 선택해 재검색할 수 있어요.'
+      :'서로 다른 프레임의 중복 일치 순으로 원본 후보 ${candidates.length}개를 찾았어요.');
+   }finally{service.close();}
+  });
+ }
  Future<void> addOrigin(BenchVideo v)async{
   originText.clear();
   final entered=await showDialog<String>(context:context,builder:(ctx)=>AlertDialog(
@@ -81,18 +105,18 @@ class _BenchmarkState extends State<BenchmarkScreen>{
  }
  Future<void> create(BenchVideo v)async{
   if(busy)return;
-  final url=state.chosen[v.id],right=state.rights[v.id],proof=state.proof[v.id]?.trim()??'';
-  if(url==null||right==null||proof.length<8){report('원본 주소·사용 권한 유형·근거를 확인해 주세요.');return;}
+   final url=state.chosen[v.id];
+   if(url==null){report('먼저 사용할 원본 게시물을 선택해 주세요.');return;}
   final fromTikTok=tiktokUrl(url)!=null;
   final mode=await showModalBottomSheet<String>(context:context,showDragHandle:true,
    builder:(ctx)=>SafeArea(child:Padding(padding:const EdgeInsets.all(20),
     child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.stretch,
      children:[const Text('원본 확보 → 기존 쇼츠 템플릿',style:TextStyle(fontSize:18,fontWeight:FontWeight.bold)),
       const SizedBox(height:10),
-      const Text('본인이 확인한 재사용 권한이 있는 원본만 가져오세요. 출처 표기만으로 허가되지 않습니다.'),
+             const Text('원본 후보를 선택한 다음 기기에 보유한 파일 또는 TikTok 영상을 연결하세요.'),
       const SizedBox(height:10),
       FilledButton(onPressed:()=>Navigator.pop(ctx,'file'),child:const Text('기기 MP4 원본 선택')),
-      if(fromTikTok)OutlinedButton(onPressed:()=>Navigator.pop(ctx,'tiktok'),child:const Text('권한 확인한 TikTok 영상 가져오기'))]))));
+      if(fromTikTok)OutlinedButton(onPressed:()=>Navigator.pop(ctx,'tiktok'),child:const Text('TikTok 영상 가져오기'))]))));
   if(mode==null)return;
   setState(()=>busy=true);
   try{
@@ -115,7 +139,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
      videoWidth:imported.videoWidth,videoHeight:imported.videoHeight,
      creator:v.channel,category:'기타',url:url,aiContext:{
        'benchVideoId':v.id,'benchmarkVideo':v.url,
-       'originalUrl':url,'rights':right,'rightsEvidence':proof});
+       'originalUrl':url});
     widget.clips.insert(0,clip);await widget.onSave();
    }
    await save();
@@ -127,8 +151,8 @@ class _BenchmarkState extends State<BenchmarkScreen>{
   finally{if(mounted)setState(()=>busy=false);}
  }
  Widget candidateCard(BenchVideo v){
-  final list=state.origins[v.id]??[],selected=state.chosen[v.id],kind=state.rights[v.id]??'';
-  final canCreate=selected!=null&&kind.isNotEmpty&&(state.proof[v.id]?.trim().length??0)>=8&&!busy;
+   final list=state.origins[v.id]??[],selected=state.chosen[v.id];
+   final canCreate=selected!=null&&!busy;
   return Card(child:Padding(padding:const EdgeInsets.all(12),child:Column(
     crossAxisAlignment:CrossAxisAlignment.stretch,children:[
      Text(v.channel,style:const TextStyle(fontSize:12)),
@@ -137,9 +161,9 @@ class _BenchmarkState extends State<BenchmarkScreen>{
      TextButton.icon(onPressed:()=>open(v.url),icon:const Icon(Icons.open_in_new),
       label:const Text('벤치마킹 영상 확인')),
      Wrap(spacing:8,children:[
-      OutlinedButton(onPressed:busy?null:()=>search(v),child:const Text('원본 후보 검색')),
+      OutlinedButton(onPressed:busy?null:()=>search(v),child:const Text('주요 장면 역이미지 검색')),
       OutlinedButton(onPressed:busy?null:()=>addOrigin(v),child:const Text('원본 링크 추가'))]),
-     if(list.isEmpty)const Text('원본 후보 미확인 · 제작 불가',style:TextStyle(fontSize:12)),
+     if(list.isEmpty)const Text('주요 장면 이미지 검색 결과 없음',style:TextStyle(fontSize:12)),
      for(final x in list)RadioListTile<String>(dense:true,contentPadding:EdgeInsets.zero,
       title:Text('${x.source}: ${x.url}',maxLines:2,overflow:TextOverflow.ellipsis),
       subtitle:Text(x.evidence,style:const TextStyle(fontSize:12)),
@@ -147,22 +171,10 @@ class _BenchmarkState extends State<BenchmarkScreen>{
       onChanged:busy?null:(u){setState(()=>state.chosen[v.id]=u!);save();}),
      if(selected!=null)TextButton.icon(onPressed:()=>open(selected),
       icon:const Icon(Icons.open_in_new),label:const Text('선택한 원본 확인')),
-     DropdownButtonFormField<String>(key:ValueKey('rights:${v.id}'),
-       value:kind.isEmpty?null:kind,
-       decoration:const InputDecoration(labelText:'재사용 권한 유형 (필수)'),
-       items:const [
-        DropdownMenuItem(value:'own',child:Text('내가 촬영한 원본')),
-        DropdownMenuItem(value:'permission',child:Text('원제작자 허락받음')),
-        DropdownMenuItem(value:'license',child:Text('재사용 허용 라이선스 확인'))],
-       onChanged:busy?null:(u){setState(()=>state.rights[v.id]=u??'');save();}),
-     TextFormField(key:ValueKey('proof:${v.id}'),initialValue:state.proof[v.id]??'',
-      maxLines:2,decoration:const InputDecoration(
-       labelText:'허락·라이선스 확인 근거 (8자 이상)',hintText:'원제작자 메시지 / 허가 조건 / 라이선스 URL'),
-      onChanged:(x){state.proof[v.id]=x;save();}),
      const SizedBox(height:8),
      FilledButton.icon(onPressed:canCreate?()=>create(v):null,
       icon:const Icon(Icons.movie_creation_outlined),
-      label:const Text('권한 확인 원본 → 템플릿 제작')),
+      label:const Text('선택한 원본 → 템플릿 제작')),
     ])));
  }
  @override Widget build(BuildContext context){
@@ -171,14 +183,24 @@ class _BenchmarkState extends State<BenchmarkScreen>{
   return Scaffold(appBar:AppBar(title:const Text('벤치마킹 쇼츠 탐색')),
    body:loading?const Center(child:CircularProgressIndicator()):
    ListView(padding:const EdgeInsets.all(16),children:[
-    const Text('채널별 조회수 상위 50개 → 랜덤 선정 → 원본 탐색 → 기존 템플릿',style:TextStyle(fontSize:14)),
+    const Text('채널별 상위 50개 → 랜덤 선정 → 주요 장면 역이미지 검색 → 기존 템플릿',style:TextStyle(fontSize:14)),
     const SizedBox(height:12),
     TextField(controller:keyText,obscureText:true,enableSuggestions:false,autocorrect:false,
       decoration:const InputDecoration(labelText:'YouTube Data API v3 키 (암호화 저장)')),
     TextButton(onPressed:busy?null:()=>run(()async{
        await Native.call('saveBenchmarkApiKey',{'key':keyText.text.trim()});
        report('YouTube Data API 키 저장 완료');
-     }),child:const Text('API 키 저장')),
+           }),child:const Text('API 키 저장')),
+    const SizedBox(height:8),
+    TextField(controller:visionKeyText,obscureText:true,enableSuggestions:false,autocorrect:false,
+      decoration:const InputDecoration(labelText:'Cloud Vision Web Detection API 키',
+        helperText:'Cloud Vision API 활성화 필요 · 빈칸이면 YouTube API 키 사용')),
+    TextButton(onPressed:busy?null:()=>run(()async{
+       await Native.call('saveBenchmarkVisionKey',{'key':visionKeyText.text.trim()});
+       report('Vision 검색 키를 암호화 저장했어요.');
+     }),child:const Text('Vision API 키 저장')),
+    const Text('실제 영상의 주요 장면 검색을 위해 영상 파일 선택이 필요합니다. 제목·설명란·Tavily 검색은 사용하지 않아요.',
+      style:TextStyle(fontSize:12)),
     Text('채널 ${state.channels.length}개 · 순위 후보 $count개',style:const TextStyle(fontWeight:FontWeight.bold)),
     Row(children:[
      Expanded(child:TextField(controller:channelText,decoration:const InputDecoration(labelText:'채널 UC ID 추가'))),
@@ -202,7 +224,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
     if(message.isNotEmpty)SelectableText(message,style:const TextStyle(fontSize:12)),
     const Divider(height:32),
     Text('이번 선정 ${selected.length}개',style:const TextStyle(fontWeight:FontWeight.bold,fontSize:18)),
-    const Text('검색 후보는 원제작자와 일치한다고 보장하지 않아요. 직접 확인하고 재사용 권한이 있는 경우만 제작하세요.',
+         const Text('여러 이미지에서 일치한 페이지를 우선 표시해요. 후보가 최초 제작자라고 확정되는 것은 아니에요.',
      style:TextStyle(fontSize:12)),
     for(final v in selected)candidateCard(v),
    ]));
