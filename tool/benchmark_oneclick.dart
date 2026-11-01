@@ -21,9 +21,11 @@ class CandidateCheck {
 }
 
 class OneClickResult {
-  const OneClickResult(this.results,{required this.total,required this.inspected});
+  const OneClickResult(this.results,{required this.total,required this.inspected,
+    required this.diagnostic});
   final List<CandidateCheck> results;
   final int total,inspected;
+  final String diagnostic;
   CandidateCheck? get best {
     for(final r in results){if(r.status=='checked'&&r.clip!=null)return r;}
     return null;
@@ -197,15 +199,18 @@ class OneClickExplorer {
     _check();
     report('1/3 · 주요 장면으로 웹 이미지 후보 검색 중');
     final finder=FrameReverseSearch(apiKey);
-    List<BenchOrigin> discovered;
+    VisionSearchReport discovery;
     try{
-      discovered=await finder.discover(benchmarkId,frames)
+      discovery=await finder.discoverReport(benchmarkId,frames)
         .timeout(const Duration(seconds:95));
       _check();
     }
     finally{finder.close();}
+    report(discovery.diagnostic);
+    final discovered=discovery.candidates;
     if(discovered.isEmpty){
-      return const OneClickResult([],total:0,inspected:0);
+      return OneClickResult(const [],total:0,inspected:0,
+        diagnostic:discovery.diagnostic);
     }
     final results=<CandidateCheck>[];
     var checked=0;
@@ -245,6 +250,15 @@ class OneClickExplorer {
       int weight(String s)=>switch(s){'checked'=>0,'overlay'=>1,'unverified'=>2,'unsupported'=>3,_=>4};
       return weight(a.status).compareTo(weight(b.status));
     });
-    return OneClickResult(results,total:discovered.length,inspected:checked);
+    final verified=results.where((r)=>r.status=='checked').length;
+    final rejected=results.where((r)=>r.status=='unrelated').length;
+    final overlay=results.where((r)=>r.status=='overlay').length;
+    final failures=results.where((r)=>r.status=='error').length;
+    final diagnostic='${discovery.diagnostic} 실제 영상 검사 $checked건 · '
+      '장면·자막 검증 통과 $verified건 · 불일치 $rejected건 · '
+      '자막 의심 $overlay건 · 처리 실패 $failures건.';
+    report(diagnostic);
+    return OneClickResult(results,total:discovered.length,inspected:checked,
+      diagnostic:diagnostic);
   }
 }
