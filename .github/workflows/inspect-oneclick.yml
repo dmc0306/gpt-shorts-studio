@@ -1,0 +1,37 @@
+name: Inspect one-click matching integrations
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-oneclick.yml'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect source interfaces
+        run: |
+          python3 - <<'PY'
+          import zipfile,re
+          z=zipfile.ZipFile('shorts-studio-source.zip')
+          names=z.namelist()
+          for n in ['lib/tiktok_download.dart','lib/benchmark_stream.dart','lib/benchmark_ui.dart','lib/vision_reverse.dart','lib/benchmark_data.dart','lib/bridge.dart','lib/model.dart','lib/discovery.dart','lib/auto_batch.dart','native/android/MainActivity.kt','native/android/BenchmarkFrameExtractor.kt','tool/bootstrap.py','pubspec.yaml','native/android/build.gradle.kts','native/android/build.gradle','native/android/AndroidManifest.xml']:
+            if n not in names:continue
+            lines=z.read(n).decode('utf8').splitlines()
+            print('===FILE',n,len(lines))
+            if n in ['lib/tiktok_download.dart','lib/benchmark_stream.dart','lib/vision_reverse.dart','lib/benchmark_data.dart','lib/bridge.dart','pubspec.yaml','native/android/BenchmarkFrameExtractor.kt']:
+              subset=range(min(len(lines),280))
+            elif n=='lib/benchmark_ui.dart':
+              subset=range(min(len(lines),205))
+            elif n=='native/android/MainActivity.kt':
+              picked=set(range(min(60,len(lines))))
+              for i,x in enumerate(lines):
+                if any(k in x for k in ['benchmarkExtractFramesFromCache','benchmarkPickFrames','pickVideo','scanVideo','ocr','MLKit','TextRecognition','File(', 'deleteClip','deleteVideo','importUri','extractText','FrameExtractor','analyzeVideo']):
+                  picked.update(range(max(i-4,0),min(i+14,len(lines))))
+              subset=sorted(picked)[:480]
+            else:
+              subset=range(min(len(lines),80))
+            for i in subset:
+              print(f'{i+1:04}: {lines[i][:350]}')
+          PY
