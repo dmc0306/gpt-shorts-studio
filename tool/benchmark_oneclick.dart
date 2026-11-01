@@ -14,6 +14,30 @@ class OneClickCancelled implements Exception {
   @override String toString()=> '원본 탐색을 중단했어요.';
 }
 
+/// Condense external extractor debug HTML and platform internals into
+/// actionable, bounded messages. Never log raw provider page bodies in UI.
+class CandidateFailure {
+  static String describe(Object error){
+    final raw=error.toString();
+    final lower=raw.toLowerCase();
+    if(raw.contains('10204')||raw.contains('PAGE_UNAVAILABLE')){
+      return 'TikTok에서 후보 영상 정보를 가져오지 못했어요 (추출기 오류 10204). 공개 페이지가 표시되더라도 영상 스트림 접근은 별도로 막힐 수 있어요.';
+    }
+    if(lower.contains('403')||lower.contains('forbidden')){
+      return '영상 스트림 요청이 HTTP 403으로 거절됐어요. 현재 다운로드 경로의 접근 제한 가능성이 있어요.';
+    }
+    if(lower.contains('85초')||lower.contains('95초')||
+       lower.contains('timeout')||lower.contains('time out')){
+      return '후보 영상 스트림 확인 제한시간 초과. 원본 영상 일치 여부는 아직 알 수 없어요.';
+    }
+    if(lower.contains('취소')||lower.contains('cancel')){
+      return '후보 영상 스트림 연결이 취소됐어요. 원본 일치 여부는 미확인입니다.';
+    }
+    final cleaned=raw.replaceAll(RegExp(r'\\s+'),' ').trim();
+    return cleaned.length<=170?cleaned:'${cleaned.substring(0,170)}… (상세 로그 생략)';
+  }
+}
+
 class CandidateCheck {
   const CandidateCheck(this.origin,this.status,this.detail,{this.clip});
   final BenchOrigin origin;
@@ -204,7 +228,8 @@ class CandidateThumbnail {
     }catch(e){
       if(_cancelled)throw const OneClickCancelled();
       return CandidateCheck(origin,'error',
-        '후보 영상 확인 실패: $e${imageHint.isNotEmpty?' · $imageHint':''}');
+        '후보 영상 확인 실패: ${CandidateFailure.describe(e)}'
+        '${imageHint.isNotEmpty?' · $imageHint':''}');
     }finally{
       _activeResolver=null;_activeTikTok=null;
       if(downloaded!=null&&!retainDownloaded){
