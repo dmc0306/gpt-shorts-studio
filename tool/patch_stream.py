@@ -44,7 +44,7 @@ insert='''            "benchmarkStreamCachePath" -> {
 exact(native,anchor,insert+anchor)
 pub='pubspec.yaml'
 exact(pub,'version: 0.20.2+55','version: 0.20.3+56')
-exact(pub,'dependencies:\n','dependencies:\n  youtube_explode_dart: ^3.1.0\n')
+exact(pub,'\ndependencies:\n','\ndependencies:\n  youtube_explode_dart: ^3.1.0\n')
 with ZipFile(tmp,'w') as z:
     for info,raw in items:
         body=updated.pop(info.filename,None)
