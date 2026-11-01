@@ -22,9 +22,7 @@ change(k,"            val request = AuthorizationRequest.Builder(config, CLIENT_
                 .remove("ytRedirectReceived").remove("ytRedirectValid")
                 .remove("ytRedirectCode").remove("ytRedirectError").commit())
             val request = AuthorizationRequest.Builder(config, CLIENT_ID, ResponseTypeValues.CODE, REDIRECT)''')
-change(k,'''            } else {
-                oauthFailure(exception, "authorize")
-            }
+change(k,'''            } else oauthFailure(exception, "authorize")
             return true
         }''','''            } else if (exception.type == AuthorizationException.TYPE_GENERAL_ERROR && exception.code == 1) {
                 val receipt = redirectTrace()
@@ -33,9 +31,7 @@ change(k,'''            } else {
                     if (seen) "OAuth 복귀 URI를 받았지만 AppAuth가 완료하지 못했어요."
                     else "Google 동의 후 OAuth 복귀 URI가 Android 앱에 전달되지 않았어요.",
                     receipt + mapOf("oauthType" to exception.type, "oauthCode" to exception.code))
-            } else {
-                oauthFailure(exception, "authorize")
-            }
+            } else oauthFailure(exception, "authorize")
             return true
         }''')
 change(k,'''        try { result.success(load()?.let { metadata(it) } ?: mapOf("hasGrant" to false, "hasRefreshToken" to false)) }''','''        try { result.success((load()?.let { metadata(it) } ?: mapOf("hasGrant" to false, "hasRefreshToken" to false)) + redirectTrace()) }''')
