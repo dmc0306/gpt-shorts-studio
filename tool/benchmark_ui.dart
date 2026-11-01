@@ -23,6 +23,18 @@ class _BenchmarkState extends State<BenchmarkScreen>{
  String message='';
  final framePreviews=<String,List<Uint8List>>{};
  bool busy=false,loading=true;
+ String? activeVideoId;
+ bool cancelled=false;
+ OneClickExplorer? activeExplorer;
+ BenchmarkStreamResolver? activeStream;
+ void stopSearch(){
+   if(!busy)return;
+   cancelled=true;
+   activeExplorer?.cancel();
+   activeStream?.cancel();
+   Native.call('cancelTextScan');
+   report('중단 요청을 전달했어요. 현재 영상 처리 종료 후 버튼이 복구됩니다.');
+ }
  @override void initState(){super.initState();load();}
  @override void dispose(){keyText.dispose();visionKeyText.dispose();channelText.dispose();originText.dispose();super.dispose();}
  Future<void> load()async{
@@ -69,6 +81,9 @@ class _BenchmarkState extends State<BenchmarkScreen>{
   if(visionKeyText.text.trim().isEmpty&&keyText.text.trim().isEmpty){
     report('Cloud Vision API 키를 입력해 주세요.');return;
   }
+  cancelled=false;
+  if(mounted)setState(()=>activeVideoId=v.id);
+  try{
   await run(()async{
     List<dynamic>? frames;
     if(manual){
@@ -80,9 +95,12 @@ class _BenchmarkState extends State<BenchmarkScreen>{
       if(path==null)throw StateError('임시 영상 경로를 가져오지 못했어요.');
       try{
         report('선정된 영상 스트림 확보 중');
-        await BenchmarkStreamResolver().download(v.id,path,(message)=>report(message));
+        activeStream=BenchmarkStreamResolver();
+        await activeStream!.download(v.id,path,(message)=>report(message));
+        if(cancelled)throw const OneClickCancelled();
         frames=await Native.call<List<dynamic>>('benchmarkExtractFramesFromCache',{'id':v.id});
       }finally{
+        activeStream=null;
         try{final f=File(path);if(await f.exists())await f.delete();}catch(_){}
       }
     }
@@ -96,7 +114,9 @@ class _BenchmarkState extends State<BenchmarkScreen>{
     if(mounted)setState(()=>framePreviews[v.id]=previews);
     final key=visionKeyText.text.trim().isNotEmpty?visionKeyText.text.trim():keyText.text.trim();
     final explorer=OneClickExplorer(key,(message)=>report(message));
+    activeExplorer=explorer;
     final result=await explorer.run(v.id,frames);
+    if(cancelled)throw const OneClickCancelled();
     final visible=<BenchOrigin>[];
     for(final item in result.results){
       final prefix=switch(item.status){
@@ -137,6 +157,11 @@ class _BenchmarkState extends State<BenchmarkScreen>{
       report('원클릭 탐색 완료 · 이미지 후보 ${result.total}개 · 실제 영상 검사 ${result.inspected}개 · 자동 제작 조건을 통과한 TikTok 원본 없음. 화면의 후보와 사유를 확인해 주세요.');
     }
   });
+  }finally{
+    activeExplorer=null;
+    activeStream=null;
+    if(mounted)setState(()=>activeVideoId=null);
+  }
  }
  Future<void> addOrigin(BenchVideo v)async{
   originText.clear();
@@ -220,6 +245,16 @@ class _BenchmarkState extends State<BenchmarkScreen>{
         icon:const Icon(Icons.auto_awesome),label:const Text('원클릭 원본 탐색 → 검증 → 제작')),
       OutlinedButton(onPressed:busy?null:()=>search(v,manual:true),child:const Text('영상 파일 직접 선택')),
       OutlinedButton(onPressed:busy?null:()=>addOrigin(v),child:const Text('원본 링크 추가'))]),
+     if(busy&&activeVideoId==v.id)...[
+       const SizedBox(height:8),
+       const LinearProgressIndicator(),
+       const SizedBox(height:4),
+       SelectableText(message,style:const TextStyle(fontSize:13,fontWeight:FontWeight.bold)),
+       Align(alignment:Alignment.centerLeft,child:TextButton.icon(
+         onPressed:cancelled?null:stopSearch,
+         icon:const Icon(Icons.stop_circle_outlined),
+         label:Text(cancelled?'중단 처리 중':'검색 중단'))),
+     ],
      if(framePreviews[v.id]?.isNotEmpty==true)...[
        const Text('실제 검색에 사용한 장면 (자막 영역 크롭)',style:TextStyle(fontSize:12,fontWeight:FontWeight.bold)),
        const SizedBox(height:6),
@@ -231,7 +266,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
            width:105,height:120,fit:BoxFit.cover))),
        const SizedBox(height:8),
      ],
-     if(list.isEmpty)const Text('확인된 직접 일치 후보 없음 · 관련 영상만 나온 경우 표시하지 않아요.',
+     if(list.isEmpty&&!busy)const Text('확인된 원본 후보 없음 · 이미지 색인에 원본이 없거나 후보 영상 비교에서 탈락했을 수 있어요.',
        style:TextStyle(fontSize:12)),
      for(final x in list)RadioListTile<String>(dense:true,contentPadding:EdgeInsets.zero,
       title:Text('${x.source}: ${x.url}',maxLines:2,overflow:TextOverflow.ellipsis),
@@ -311,7 +346,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
     if(message.isNotEmpty)SelectableText(message,style:const TextStyle(fontSize:12)),
     const Divider(height:32),
     Text('이번 선정 ${selected.length}개',style:const TextStyle(fontWeight:FontWeight.bold,fontSize:18)),
-         const Text('완전·부분 이미지 매칭을 구분하고, 서로 다른 3개 이상 장면에서 직접 일치할 때만 후보를 표시합니다. 최초 제작자임을 보장하지는 않아요.',
+         const Text('이미지 한 장에서 발견된 링크도 탐색하되 실제 동영상과 프레임을 대조해요. 검색 중에는 해당 카드에 진행 상황과 중단 버튼이 표시됩니다.',
      style:TextStyle(fontSize:12)),
     for(final v in selected)candidateCard(v),
    ]));
