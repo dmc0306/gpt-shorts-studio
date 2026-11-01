@@ -33,7 +33,7 @@ class CandidateFailure {
     if(lower.contains('취소')||lower.contains('cancel')){
       return '후보 영상 스트림 연결이 취소됐어요. 원본 일치 여부는 미확인입니다.';
     }
-    final cleaned=raw.replaceAll(RegExp(r'\\s+'),' ').trim();
+    final cleaned=raw.replaceAll(RegExp(r'\s+'),' ').trim();
     return cleaned.length<=170?cleaned:'${cleaned.substring(0,170)}… (상세 로그 생략)';
   }
 }
