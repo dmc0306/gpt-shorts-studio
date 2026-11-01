@@ -1,0 +1,25 @@
+name: Apply one-click original video cross-verification
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/apply-oneclick.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Integrate stream-to-original one-click pipeline
+        run: python3 tool/patch_oneclick.py
+      - name: Commit versioned Android app sources
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add shorts-studio-source.zip
+          git diff --cached --quiet && { echo "No changes"; exit 1; }
+          git commit -m "One-click video reverse sourcing, candidate frame comparison and caption exclusion"
+          git push
