@@ -1,0 +1,26 @@
+name: Add image-search share fallback for benchmark scenes
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/apply-lens-fallback.yml'
+      - 'tool/patch_lens_fallback.py'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Integrate Android image-sharing fallback and app UI
+        run: python3 tool/patch_lens_fallback.py
+      - name: Commit versioned source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add shorts-studio-source.zip
+          git diff --cached --quiet && { echo "App ZIP was not modified"; exit 1; }
+          git commit -m "Add secure full-frame search sharing when Vision cannot identify a source"
+          git push
