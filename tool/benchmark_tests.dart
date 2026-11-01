@@ -77,40 +77,72 @@ void main(){
    expect(restored.seen,containsAll(['v1','v2']));
  });
 
- test('Frames matching the same original rank higher, benchmark itself excluded',(){
+
+ test('Unrelated pages and repeats in only two frames must be rejected',(){
+   final results=FrameReverseSearch.rank([
+     {'webDetection':{'pagesWithMatchingImages':[
+       {'url':'https://www.youtube.com/watch?v=Abcdefgh123','score':999},
+       {'url':'https://www.tiktok.com/@other/video/123456',
+        'fullMatchingImages':[{'url':'https://cdn.example.com/one.jpg'}]}]}},
+     {'webDetection':{'pagesWithMatchingImages':[
+       {'url':'https://www.tiktok.com/@other/video/123456',
+        'partialMatchingImages':[{'url':'https://cdn.example.com/two.jpg'}]}]}}
+   ],'N3b8Zx4Qe5M');
+   expect(results,isEmpty);
+ });
+ test('Cross-verified pages need 3 frame moments including 1 exact match',(){
+   const original='https://www.tiktok.com/@original/video/123456';
+   const noise='https://www.instagram.com/reel/XyZ123/';
    final matches=FrameReverseSearch.rank([
      {'webDetection':{'pagesWithMatchingImages':[
-       {'url':'https://www.tiktok.com/@original/video/123456','score':.8},
-       {'url':'https://www.youtube.com/watch?v=benchmark'}]}},
+       {'url':original,'fullMatchingImages':[{'url':'https://cdn.example.com/f1.jpg'}]},
+       {'url':noise,'partialMatchingImages':[{'url':'https://cdn.example.com/n1.jpg'}]}]}},
      {'webDetection':{'pagesWithMatchingImages':[
-       {'url':'https://www.tiktok.com/@original/video/123456','score':.2},
-       {'url':'https://www.tiktok.com/@other/video/345','score':1.0}]}}
-   ],'benchmark');
-   expect(matches.length,2);
-   expect(matches.first.url,contains('original'));
-   expect(matches.first.evidence,contains('2장'));
+       {'url':original,'partialMatchingImages':[{'url':'https://cdn.example.com/f2.jpg'}]},
+       {'url':noise,'partialMatchingImages':[{'url':'https://cdn.example.com/n2.jpg'}]}]}},
+     {'webDetection':{'pagesWithMatchingImages':[
+       {'url':original,'partialMatchingImages':[{'url':'https://cdn.example.com/f3.jpg'}]},
+       {'url':noise,'partialMatchingImages':[{'url':'https://cdn.example.com/n3.jpg'}]}]}}
+   ],'N3b8Zx4Qe5M');
+   expect(matches.length,1);
+   expect(matches.single.url,original);
+   expect(matches.single.evidence,contains('3개 시점'));
+   expect(matches.single.evidence,contains('완전 일치 1'));
  });
- test('Vision sends only images without title, description or Tavily',()async{
+ test('Reference video does not reappear as its own original match',(){
+   final hits=FrameReverseSearch.rank([
+     for(var i=0;i<3;i++)
+       {'webDetection':{'pagesWithMatchingImages':[
+          {'url':'https://www.youtube.com/watch?v=N3b8Zx4Qe5M',
+           'fullMatchingImages':[{'url':'https://cdn.example.com/frame$i.jpg'}]}]}}
+   ],'N3b8Zx4Qe5M');
+   expect(hits,isEmpty);
+ });
+ test('Vision sends images only, not titles or Tavily queries',()async{
    final client=MockClient((request)async{
      expect(request.url.host,'vision.googleapis.com');
      expect(request.url.queryParameters['key'],'vision-key');
      final data=jsonDecode(request.body) as Map;
      expect(data.keys.toList(),['requests']);
      final requests=data['requests'] as List;
-     expect(requests.length,2);
+     expect(requests.length,3);
      expect(jsonEncode(requests),contains('WEB_DETECTION'));
      expect(jsonEncode(requests),isNot(contains('Tavily')));
      return http.Response(jsonEncode({'responses':[
-       {'webDetection':{'pagesWithMatchingImages':[{'url':'https://www.youtube.com/shorts/AbCdEfGhijk'}]}},
-       {'webDetection':{'pagesWithMatchingImages':[{'url':'https://www.youtube.com/shorts/AbCdEfGhijk'}]}}
+       for(var i=0;i<3;i++)
+         {'webDetection':{'pagesWithMatchingImages':[
+           {'url':'https://www.youtube.com/shorts/AbCdEfGhijk',
+            if(i==0)'fullMatchingImages':[{'url':'https://cdn.example.com/img$i.jpg'}],
+            if(i!=0)'partialMatchingImages':[{'url':'https://cdn.example.com/img$i.jpg'}]}]}}
      ]}),200);
    });
    final engine=FrameReverseSearch('vision-key',client:client);
-   final results=await engine.find('reference',[{'content':List.filled(150,'A').join()},{'content':List.filled(150,'B').join()}]);
-   expect(results.single.evidence,contains('2장'));
+   final results=await engine.find('reference',[
+     for(var i=0;i<3;i){'content':List.filled(150,'A').join()}
+   ]);
+   expect(results.single.evidence,contains('3개 시점'));
    engine.close();
  });
-
 
  test('YouTube video-only stream rejects unsupported manifest safely',(){
    expect(()=>BenchmarkStreamResolver.choose(<VideoOnlyStreamInfo>[]),
