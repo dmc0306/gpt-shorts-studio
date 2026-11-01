@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 import 'benchmark_stream.dart';
 import 'benchmark_oneclick.dart';
@@ -285,6 +286,24 @@ class _BenchmarkState extends State<BenchmarkScreen>{
         onPressed:busy?null:(){setState(()=>state.channels.remove(c.key));save();})),
     FilledButton.icon(onPressed:busy?null:scan,icon:const Icon(Icons.refresh),
       label:const Text('채널별 조회수 상위 50개 갱신')),
+    FilledButton.icon(
+      onPressed:busy||count==0?null:()async{
+        final pool=<BenchVideo>[];
+        for(final key in state.channels.keys){
+          for(final video in state.top[key]??<BenchVideo>[]){
+            if(!state.seen.contains(video.id))pool.add(video);
+          }
+        }
+        if(pool.isEmpty){report('추첨할 새 영상이 없어요. 갱신 후 기존 추첨을 확인하세요.');return;}
+        final video=pool[Random.secure().nextInt(pool.length)];
+        state.selected..clear()..add(video.id);
+        state.seen.add(video.id);
+        await save();
+        if(mounted)setState((){});
+        await search(video);
+      },
+      icon:const Icon(Icons.auto_awesome),
+      label:const Text('전체 원클릭 · 랜덤 1개 → 원본 검증 → 템플릿')),
     OutlinedButton.icon(onPressed:busy||count==0?null:()=>run(()async{
        state.draw();report('${state.selected.length}개 랜덤 추첨 · 이미 추첨한 영상은 제외');}),
       icon:const Icon(Icons.shuffle),label:const Text('채널마다 무작위 1개 추첨')),
