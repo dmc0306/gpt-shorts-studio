@@ -1,3 +1,13 @@
+## 0.20.0 — 벤치마킹 채널 → 원본 후보 → 기존 템플릿 일괄 연결
+
+- 홈 상단 **벤치마킹 소재 탐색** 메뉴를 추가했습니다. 이전에 선정한 공개 쇼츠 큐레이션 채널 10개의 YouTube UC 채널 ID를 초기값으로 넣으며, ID 확인은 실제 YouTube API 응답에서 수행합니다. 추가/제외도 가능합니다.
+- 사용자가 Android 기기에 등록한 **YouTube Data API v3 키**를 Keystore로 암호화 저장합니다. 공개 채널 uploads playlist를 페이지 단위로 순회하고 `videos.list`로 조회수·설명·길이를 조회하며, 각 채널의 **180초 이하 영상 후보 조회수 상위 50개**를 저장합니다. 이 길이 기준만으로 Shorts 등록 여부가 확정되지는 않습니다.
+- 채널마다 랜덤 1개 선정, 과거 추첨 중복 방지, API 결과/원본 후보/허가 근거를 앱 전용 JSON 파일로 저장. 업로드 영상이 수집 한도를 초과하면 **전체 집계 미완료**로 표시합니다.
+- 선택 영상의 **설명란 직접 링크 + Tavily 검색**으로 TikTok/Instagram/YouTube 개별 게시물 원본 **후보**를 수집합니다. Tavily 검색 키가 없으면 설명란 링크만 검색합니다. 검색 결과는 원작자 확정이나 사용 허가 증거가 아닙니다.
+- 원본 주소 선택, 원제작자와 사용 권한 유형 및 근거(8자 이상)를 사용자가 직접 확인해야 제작 버튼이 활성화됩니다. 권한 확인 후 기기 MP4 파일 연결, 혹은 기존 TikTok 다운로드 기능을 사용해 확보한 원본을 **기존 EditorScreen**에 등록하고 AI 제목·자막 생성을 자동 실행합니다. 최종 문구 확인과 MP4 내보내기는 사용자가 담당하며 업로드를 자동 활성화하지 않습니다.
+- 기존 `lib/auto_batch.dart` 검색·제작 기능과 YouTube 업로드 기능은 변경하지 않습니다. 사용 권한이나 저작권·YouTube 재사용 콘텐츠 정책 준수는 별개 검토가 필요합니다.
+- 구현 소스 및 테스트: 압축 소스 `shorts-studio-source.zip`의 `lib/benchmark_data.dart`, `lib/benchmark_ui.dart`, `test/benchmark_test.dart`; GitHub의 `tool/benchmark_*.dart` 및 `tool/patch_benchmark.py`. 실기기 API 호출과 원본 매칭 성공률은 검증 전입니다.
+
 ## 0.19.3 — Android OAuth 직접 복귀 처리
 
 - 실제 휴대폰에서 Google 인증 코드가 Android 커스텀 URI 수신 Activity까지 정상 도착함을 0.19.2로 검증했으나, AppAuth 인증 관리 Activity는 `USER_CANCELED_AUTH_FLOW`를 반환함.
