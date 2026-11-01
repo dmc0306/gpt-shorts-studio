@@ -184,6 +184,9 @@ class OneClickExplorer {
         catch(_){}
       }
       results.add(verdict);
+      // A confirmed, caption-screened TikTok source is sufficient for
+      // one-click editor handoff. Avoid downloading additional candidates.
+      if(verdict.status=='checked'&&verdict.clip!=null)break;
     }
     for(final origin in discovered){
       if(results.any((c)=>c.origin.url==origin.url))continue;
