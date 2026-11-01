@@ -65,24 +65,73 @@ class FrameReverseSearch {
     }).toList();
   }
 
-  Future<List<BenchOrigin>> find(String benchmarkId,List<dynamic> frames)async{
+  /// Broad discovery is separate from source confirmation. One matching frame
+  /// is enough to *investigate* a video, never to label it verified.
+  static List<BenchOrigin> discoveryCandidates(Object? input,String benchmarkId){
+    if(input is! List)throw const FormatException('Vision 후보 검색 응답 오류');
+    final scores=<String,int>{};
+    final hits=<String,Set<int>>{};
+    for(var i=0;i<input.length;i++){
+      final response=input[i];
+      if(response is! Map)continue;
+      if(response['error'] is Map){
+        throw StateError('Vision 검색 응답 오류 · ${(response['error'] as Map)['code']??'unknown'}');
+      }
+      final web=response['webDetection'];
+      if(web is! Map)continue;
+      final pages=web['pagesWithMatchingImages'];
+      if(pages is! List)continue;
+      for(final page in pages){
+        if(page is! Map)continue;
+        final url=normalOrigin(page['url'] as String? ?? '');
+        if(url==null)continue;
+        final uri=Uri.tryParse(url);
+        if(uri!=null&&((uri.path=='/watch'&&uri.queryParameters['v']==benchmarkId)||
+            uri.path=='/shorts/$benchmarkId'))continue;
+        final full=page['fullMatchingImages'];
+        final partial=page['partialMatchingImages'];
+        final direct=full is List&&full.isNotEmpty;
+        final cropped=partial is List&&partial.isNotEmpty;
+        final quality=direct?3:cropped?2:1;
+        final byMoment=hits.putIfAbsent(url,()=>{});
+        if(byMoment.add(i))scores[url]=(scores[url]??0)+quality;
+      }
+    }
+    final sorted=scores.keys.toList()..sort((a,b){
+      final byScore=scores[b]!.compareTo(scores[a]!);
+      return byScore==0?(hits[b]!.length.compareTo(hits[a]!.length)):byScore;
+    });
+    return sorted.take(24).map((url)=>BenchOrigin(url,
+      '이미지 검색에서 ${hits[url]!.length}개 장면의 페이지 후보로 발견됨 · 영상 프레임 대조 전 · 원본 확정 아님',
+      '역이미지 탐색 후보')).toList();
+  }
+
+  Future<List<BenchOrigin>> discover(String benchmarkId,List<dynamic> frames) async {
+    final raw=await _responses(frames);
+    return discoveryCandidates(raw,benchmarkId);
+  }
+
+  Future<List<dynamic>> _responses(List<dynamic> frames)async{
     if(apiKey.trim().isEmpty)throw StateError('Google Cloud Vision API 키를 입력해 주세요.');
     if(frames.isEmpty||frames.length>10)throw StateError('검색할 주요 장면이 없거나 개수가 너무 많아요.');
     final requests=<Map<String,dynamic>>[];
     for(final raw in frames){
-      if(raw is! Map || raw['content'] is! String)throw const FormatException('추출 장면 데이터 오류');
+      if(raw is! Map||raw['content'] is! String)throw const FormatException('추출 이미지 데이터 오류');
       final content=raw['content'] as String;
-      if(content.length<100||content.length>1_500_000)throw const FormatException('추출 장면 이미지 크기가 올바르지 않아요.');
+      if(content.length<100||content.length>1_500_000)throw const FormatException('추출 이미지가 너무 커요.');
       requests.add({'image':{'content':content},
-        'features':[{'type':'WEB_DETECTION','maxResults':25}]});
+         'features':[{'type':'WEB_DETECTION','maxResults':30}]});
     }
-    final res=await _client.post(
-      Uri.https('vision.googleapis.com','/v1/images:annotate',{'key':apiKey}),
+    final response=await _client.post(Uri.https('vision.googleapis.com','/v1/images:annotate',{'key':apiKey}),
       headers:{'Content-Type':'application/json'},
       body:jsonEncode({'requests':requests})).timeout(const Duration(seconds:90));
-    if(res.statusCode!=200)throw StateError('Google Cloud Vision HTTP ${res.statusCode} · API 활성화, 키 제한, 결제 설정을 확인해 주세요.');
-    final decoded=jsonDecode(res.body);
-    if(decoded is! Map || decoded['responses'] is! List)throw const FormatException('Vision API 응답 형식 오류');
-    return rank(decoded['responses'],benchmarkId);
+    if(response.statusCode!=200)throw StateError('Cloud Vision HTTP ${response.statusCode}');
+    final decoded=jsonDecode(response.body);
+    if(decoded is! Map||decoded['responses'] is! List)throw const FormatException('Vision API 응답 오류');
+    return decoded['responses'] as List;
+  }
+
+  Future<List<BenchOrigin>> find(String benchmarkId,List<dynamic> frames)async {
+    return rank(await _responses(frames),benchmarkId);
   }
 }
