@@ -163,7 +163,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
      FilledButton.icon(onPressed:canCreate?()=>create(v):null,
       icon:const Icon(Icons.movie_creation_outlined),
       label:const Text('권한 확인 원본 → 템플릿 제작')),
-    ]))));
+    ])));
  }
  @override Widget build(BuildContext context){
   final selected=state.picked;
