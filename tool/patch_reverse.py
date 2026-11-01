@@ -149,7 +149,7 @@ newTests="""
      expect(request.url.host,'vision.googleapis.com');
      expect(request.url.queryParameters['key'],'vision-key');
      final data=jsonDecode(request.body) as Map;
-     expect(data.keys,toList(['requests']));
+     expect(data.keys.toList(),['requests']);
      final requests=data['requests'] as List;
      expect(requests.length,2);
      expect(jsonEncode(requests),contains('WEB_DETECTION'));
