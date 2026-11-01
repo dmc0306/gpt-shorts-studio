@@ -1,0 +1,45 @@
+name: OAuth source inspection (temporary)
+on:
+  push:
+    paths:
+      - '.github/workflows/oauth-source-inspect.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect source package without secrets
+        run: |
+          python3 - <<'PY'
+          import zipfile, re, pathlib
+          z=zipfile.ZipFile('shorts-studio-source.zip')
+          names=z.namelist()
+          print('SOURCE INDEX',len(names))
+          for n in names:
+              if any(k in n.lower() for k in ('auth','manifest','gradle','mainactivity','app.dart','settings','youtube','chrome','callback')):
+                  if not n.endswith('/') and not '/build/' in n:
+                      print('FILE', n)
+          terms=('AUTH_CHROME_AUTHORIZE','RedirectUriReceiverActivity','appAuthRedirectScheme',
+                 'getAuthorizationRequestIntent','performAuthorizationRequest',
+                 'getAuthorizationResponse','chromeAuthorize','chrome_authorize',
+                 'AuthorizationManagementActivity','chromeOAuth','authorizeWithChrome',
+                 'authorization_code','net.openid.appauth','BrowserMatcher','redirectUri')
+          for n in names:
+              if n.endswith('/') or not n.endswith(('.dart','.kt','.java','.xml','.gradle','.properties','.md')) or any(t in n for t in ('/build/','/.dart_tool/','.pub-cache','/test/')): continue
+              try: s=z.read(n).decode('utf-8')
+              except: continue
+              lines=s.splitlines()
+              matches=[i for i,l in enumerate(lines) if any(t.lower() in l.lower() for t in terms)]
+              if not matches: continue
+              print('==== INSPECT',n,'LINES',len(lines),'MATCHES',len(matches))
+              picked=set()
+              for i in matches[:24]:
+                  for j in range(max(0,i-18),min(len(lines),i+33)): picked.add(j)
+              for j in sorted(picked)[:550]:
+                  l=lines[j]
+                  if len(l)>500:l=l[:500]+' ...'
+                  print(f'{j+1:5d}: {l}')
+          PY
