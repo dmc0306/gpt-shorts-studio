@@ -104,7 +104,7 @@ void main(){
      ]}),200);
    });
    final engine=FrameReverseSearch('vision-key',client:client);
-   final results=await engine.find('reference',[{'content':'A'*150},{'content':'B'*150}]);
+   final results=await engine.find('reference',[{'content':List.filled(150,'A').join()},{'content':List.filled(150,'B').join()}]);
    expect(results.single.evidence,contains('2장'));
    engine.close();
  });
