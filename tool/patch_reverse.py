@@ -23,7 +23,7 @@ def change(path,a,b):
             n=1
     if n!=1:
         # Match exact text across legacy indentation variants, once only.
-        pattern=r'[ \\t]*'+r'[ \\t]*\\n[ \\t]*'.join(re.escape(line.strip()) for line in a.splitlines())
+        pattern=r'[ \t]*'+r'[ \t]*\n[ \t]*'.join(re.escape(line.strip()) for line in a.splitlines())
         hits=list(re.finditer(pattern,s))
         if len(hits)==1:
             m=hits[0]
