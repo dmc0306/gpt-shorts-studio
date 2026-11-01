@@ -1,3 +1,11 @@
+## 0.18.0 — Android direct authorization diagnostic
+
+- User verified that explicitly selecting the Brand channel in the web API Explorer returns the intended channel. The remaining unknown is Android account/Brand chooser behavior, not public channel existence.
+- Added a separate read-only diagnostic using native AuthorizationClient with play-services-auth 22.0.0. It requests only YouTube readonly/upload scopes, opts out of including previously granted scopes, and sets Prompt.SELECT_ACCOUNT without first calling GoogleSignIn.authenticate or pinning a personal account. Verified methods against official docs and the actual 22.0.0 AAR.
+- Google controls whether Brand identities appear; resolutionShown records only that Google's PendingIntent was launched, not that a Brand picker was available. Do not label APK compilation or a mocked channel response as live Brand success.
+- Test screen is separate from normal connection preferences: no authMode switch, automatic setting changes, refresh tokens, token persistence, MP4 upload or server dependency. Token stays in the private method channel/Dart memory for one channels.list GET. Copy report includes only safe diagnostics, channel name/ID and no token/raw OAuth response.
+- Bound pending requests, cancellation/timeout and stale-callback generation guard. Existing media picker callbacks and legacy authentication paths preserved. Regression tests cover GET-only lookup, zero channels, native developer error and response redaction.
+
 ## 0.17.1 — Keep authentication settings usable after cancellation
 
 - Initial 0.17.0 Actions analysis/tests/APK/signature passed. Final review caught an over-broad text edit disposing the server field controllers in the cancel callback. Removed it and added a UI test that cancels then edits the server address. Only screen disposal releases controllers.
