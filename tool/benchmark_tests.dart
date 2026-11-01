@@ -172,4 +172,22 @@ void main(){
    expect(OneClickExplorer.youtubeId('https://www.youtube.com/@anyone'),null);
  });
 
+ test('Search diagnostics distinguish no web image index from unsupported video page',(){
+   const none=VisionSearchReport(candidates:[],frames:6,pages:0,
+      pagesWithEvidence:0,socialPosts:0,indexedImages:0);
+   expect(none.diagnostic,contains('웹페이지가 0개'));
+   const notIndexed=VisionSearchReport(candidates:[],frames:6,pages:13,
+      pagesWithEvidence:2,socialPosts:0,indexedImages:4);
+   expect(notIndexed.diagnostic,contains('개별 게시물 0건'));
+   const several=VisionSearchReport(candidates:[],frames:6,pages:25,
+      pagesWithEvidence:4,socialPosts:3,indexedImages:9);
+   expect(several.diagnostic,contains('소셜 게시물 단서 3건'));
+ });
+ test('Per-video search diagnostic text survives cache restore',(){
+   final state=BenchState();
+   state.diagnostics['abc123']='웹 이미지 일치 페이지 0건';
+   final restored=BenchState.fromJson(state.toJson());
+   expect(restored.diagnostics['abc123'],state.diagnostics['abc123']);
+ });
+
 }
