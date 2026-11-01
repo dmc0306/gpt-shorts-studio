@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'benchmark_stream.dart';
+import 'benchmark_oneclick.dart';
 import 'package:flutter/material.dart';
 import 'benchmark_data.dart';
 import 'bridge.dart';
@@ -32,7 +33,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
    // Expire the previous text-search origin suggestions; keep user-added links.
    for(final id in state.origins.keys.toList()){
      state.origins[id]=state.origins[id]!.where((c)=>
-       c.source=='직접일치 교차검증 v2'||c.source=='직접 추가').toList();
+       c.source=='실제 동영상 교차확인'||c.source=='검증되지 않은 검색 후보'||c.source=='직접 추가').toList();
      if(!state.origins[id]!.any((c)=>c.url==state.chosen[id]))state.chosen.remove(id);
    }
   }catch(_){message='이전 소재 기록을 불러오지 못했어요.';}
@@ -65,51 +66,75 @@ class _BenchmarkState extends State<BenchmarkScreen>{
  Future<void> search(BenchVideo v,{bool manual=false})async{
   if(busy)return;
   if(visionKeyText.text.trim().isEmpty&&keyText.text.trim().isEmpty){
-    report('Cloud Vision API 키를 입력해 주세요.');
-    return;
+    report('Cloud Vision API 키를 입력해 주세요.');return;
   }
   await run(()async{
     List<dynamic>? frames;
     if(manual){
-      report('기기에서 영상 파일을 선택해 주세요.');
+      report('기기에 있는 벤치마킹 영상 선택');
       frames=await Native.call<List<dynamic>>('benchmarkPickFrames');
       if(frames==null){report('파일 선택을 취소했어요.');return;}
     }else{
       final path=await Native.call<String>('benchmarkStreamCachePath',{'id':v.id});
-      if(path==null)throw StateError('기기의 영상 임시 경로를 확인할 수 없어요.');
+      if(path==null)throw StateError('임시 영상 경로를 가져오지 못했어요.');
       try{
-        final resolver=BenchmarkStreamResolver();
-        await resolver.download(v.id,path,(msg)=>report(msg));
-        report('실제 YouTube 스트림에서 프레임 추출 중');
+        report('선정된 영상 스트림 확보 중');
+        await BenchmarkStreamResolver().download(v.id,path,(message)=>report(message));
         frames=await Native.call<List<dynamic>>('benchmarkExtractFramesFromCache',{'id':v.id});
       }finally{
-        try{
-          final tmp=File(path);
-          if(await tmp.exists())await tmp.delete();
-        }catch(_){}
+        try{final f=File(path);if(await f.exists())await f.delete();}catch(_){}
       }
     }
-    if(frames==null||frames.isEmpty){
-      report('검색 가능한 영상 장면이 없어요. 직접 파일 선택으로 재시도해 주세요.');
-      return;
-    }
-    final images=<Uint8List>[];
-    for(final entry in frames){
-      if(entry is Map && entry['content'] is String){
-        images.add(base64Decode(entry['content'] as String));
+    if(frames==null||frames.isEmpty){report('영상 프레임 추출 실패');return;}
+    final previews=<Uint8List>[];
+    for(final frame in frames){
+      if(frame is Map&&frame['content'] is String){
+        previews.add(base64Decode(frame['content'] as String));
       }
     }
-    if(mounted)setState(()=>framePreviews[v.id]=images);
-    report('실제 프레임 ${frames.length}장으로 역이미지 검색 중 · 직접 일치 근거를 교차검증합니다.');
+    if(mounted)setState(()=>framePreviews[v.id]=previews);
     final key=visionKeyText.text.trim().isNotEmpty?visionKeyText.text.trim():keyText.text.trim();
-    final engine=FrameReverseSearch(key);
-    try{
-      final results=await engine.find(v.id,frames);
-      state.origins[v.id]=results;
-      state.chosen.remove(v.id);
-      report(results.isEmpty?'직접 일치 근거가 있는 후보를 찾지 못했어요. 관련 영상 링크는 오탐 방지를 위해 숨겼습니다.':
-        '서로 다른 3개 이상 장면과 직접 일치하는 후보 ${results.length}개를 찾았어요.');
-    }finally{engine.close();}
+    final explorer=OneClickExplorer(key,(message)=>report(message));
+    final result=await explorer.run(v.id,frames);
+    final visible=<BenchOrigin>[];
+    for(final item in result.results){
+      final prefix=switch(item.status){
+        'checked'=>'검증됨 · 자막 의심 미검출',
+        'overlay'=>'제외 · 기존 자막 의심',
+        'unrelated'=>'제외 · 실제 영상 불일치',
+        'unsupported'=>'확인 필요 · 플랫폼 미지원',
+        'error'=>'확인 실패',_=>'확인 필요'
+      };
+      visible.add(BenchOrigin(item.origin.url,'$prefix · ${item.detail}',item.status=='checked'?
+        '실제 동영상 교차확인':'검증되지 않은 검색 후보'));
+    }
+    state.origins[v.id]=visible;
+    state.chosen.remove(v.id);
+    await save();
+    final best=result.best;
+    if(best?.clip!=null){
+      state.chosen[v.id]=best!.origin.url;
+      report('원본 영상 장면 교차확인 · 추가 자막 의심 미검출 · 기존 편집기를 엽니다.');
+      final imported=best.clip!;
+      final original=Clip(id:imported.id,name:v.title,path:imported.path,
+        thumbnail:imported.thumbnail,duration:imported.duration,
+        videoWidth:imported.videoWidth,videoHeight:imported.videoHeight,
+        creator:v.channel,category:'기타',url:best.origin.url,aiContext:{
+          'benchVideoId':v.id,'benchmarkVideo':v.url,
+          'originalUrl':best.origin.url,'oneClickValidation':'frame-match-and-ocr',
+        });
+      if(!widget.clips.any((c)=>c.id==original.id)){
+        widget.clips.insert(0,original);
+        await widget.onSave();
+      }
+      await save();
+      if(!mounted)return;
+      await Navigator.push(context,MaterialPageRoute(builder:(_)=>EditorScreen(
+        clip:original,onSave:widget.onSave,autoGenerateOnOpen:true)));
+      report('자동 확인된 후보를 편집기로 연결했어요. 게시 전 원본·기존 자막 여부를 최종 확인해 주세요.');
+    }else{
+      report('원클릭 탐색 완료 · 이미지 후보 ${result.total}개 · 실제 영상 검사 ${result.inspected}개 · 자동 제작 조건을 통과한 TikTok 원본 없음. 화면의 후보와 사유를 확인해 주세요.');
+    }
   });
  }
  Future<void> addOrigin(BenchVideo v)async{
@@ -190,7 +215,8 @@ class _BenchmarkState extends State<BenchmarkScreen>{
      TextButton.icon(onPressed:()=>open(v.url),icon:const Icon(Icons.open_in_new),
       label:const Text('벤치마킹 영상 확인')),
      Wrap(spacing:8,children:[
-      OutlinedButton(onPressed:busy?null:()=>search(v),child:const Text('영상 스트림 자동 검색')),
+      FilledButton.icon(onPressed:busy?null:()=>search(v),
+        icon:const Icon(Icons.auto_awesome),label:const Text('원클릭 원본 탐색 → 검증 → 제작')),
       OutlinedButton(onPressed:busy?null:()=>search(v,manual:true),child:const Text('영상 파일 직접 선택')),
       OutlinedButton(onPressed:busy?null:()=>addOrigin(v),child:const Text('원본 링크 추가'))]),
      if(framePreviews[v.id]?.isNotEmpty==true)...[
@@ -210,7 +236,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
       title:Text('${x.source}: ${x.url}',maxLines:2,overflow:TextOverflow.ellipsis),
       subtitle:Text(x.evidence,style:const TextStyle(fontSize:12)),
       value:x.url,groupValue:selected,
-      onChanged:busy?null:(u){setState(()=>state.chosen[v.id]=u!);save();}),
+      onChanged:busy||x.source=='검증되지 않은 검색 후보'?null:(u){setState(()=>state.chosen[v.id]=u!);save();}),
      if(selected!=null)TextButton.icon(onPressed:()=>open(selected),
       icon:const Icon(Icons.open_in_new),label:const Text('선택한 원본 확인')),
      const SizedBox(height:8),
@@ -241,7 +267,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
        await Native.call('saveBenchmarkVisionKey',{'key':visionKeyText.text.trim()});
        report('Vision 검색 키를 암호화 저장했어요.');
      }),child:const Text('Vision API 키 저장')),
-    const Text('선정 영상의 공개 스트림에서 주요 장면을 자동 추출합니다. 스트림을 열 수 없는 경우 직접 파일 선택을 이용하세요. 제목·설명란·Tavily는 검색하지 않아요.',
+    const Text('원클릭으로 영상 스트림 → 6개 프레임 → 역이미지 후보 → 최대 5개 실제 동영상 비교·자막 검사 → 확인된 TikTok 원본은 기존 편집기로 연결합니다. Instagram 및 자동 검증 실패는 수동 확인이 필요해요.',
       style:TextStyle(fontSize:12)),
     Text('채널 ${state.channels.length}개 · 순위 후보 $count개',style:const TextStyle(fontWeight:FontWeight.bold)),
     Row(children:[
