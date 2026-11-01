@@ -1,0 +1,39 @@
+name: Inspect reverse frame search integration
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-vision.yml'
+permissions: { contents: read }
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show key native and Dart integration points
+        run: |
+          python3 - <<'PY'
+          import zipfile
+          z=zipfile.ZipFile("shorts-studio-source.zip")
+          for name in ("native/android/MainActivity.kt","native/android/AndroidManifest.xml",
+                       "tool/bootstrap.py","lib/benchmark_ui.dart","lib/benchmark_data.dart",
+                       "lib/main.dart","lib/bridge.dart","lib/model.dart","pubspec.yaml"):
+            if name not in z.namelist(): continue
+            rows=z.read(name).decode("utf-8").splitlines()
+            print(f"==== {name} ({len(rows)} lines)")
+            if name=="native/android/MainActivity.kt":
+              idx=set(range(min(72,len(rows))))
+              for i,line in enumerate(rows):
+                if any(k in line for k in ('pickVideo','loadBenchmark','benchmarkApi','openBenchmark','loadAiSettings',
+                   'saveAiKey','atomicWrite','MethodCall','when(call.method','\"pickVideo\"','\"loadAiSettings\"',
+                   'cacheDir','MediaMetadataRetriever','Bitmap','getFrameAtTime','query','File(')):
+                  idx.update(range(max(0,i-8),min(len(rows),i+15)))
+              indices=sorted(idx)[:750]
+            elif name=="tool/bootstrap.py":
+              indices=list(range(min(160,len(rows))))
+            elif name=="lib/benchmark_ui.dart":
+              indices=list(range(min(230,len(rows))))
+            elif name=="lib/benchmark_data.dart":
+              indices=list(range(min(225,len(rows))))
+            else:indices=list(range(min(115,len(rows))))
+            for i in indices:print(f"{i+1:04d}: {rows[i][:400]}")
+          PY
