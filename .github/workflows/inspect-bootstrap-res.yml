@@ -16,7 +16,7 @@ jobs:
           print("ANDROID PATHS")
           print("\n".join(x for x in z.namelist() if 'native/android' in x and ('res/' in x or 'build.gradle' in x))[:4000])
           t=z.read('tool/bootstrap.py').decode()
-          print('BOOTSTRAP',len(t))
+          print('BOOTSTRAP',len(t));print('BOOTSTRAP_TEXT',t)
           for i,line in enumerate(t.splitlines()):
              if any(x in line for x in ['native/android', 'res/', 'AndroidManifest', 'kotlin/', 'build.gradle']):
                  print(i+1,line[:250])
