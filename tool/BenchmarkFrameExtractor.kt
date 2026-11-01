@@ -70,10 +70,14 @@ object BenchmarkFrameExtractor {
 
     private fun centerCrop(frame:Bitmap):Bitmap {
         val portrait=frame.height>frame.width
-        val trimY=(frame.height*(if(portrait)0.18 else 0.10)).toInt()
-        val trimX=(frame.width*(if(portrait)0.06 else 0.04)).toInt()
-        return Bitmap.createBitmap(frame,trimX,trimY,
-            frame.width-2*trimX,frame.height-2*trimY)
+        // Many benchmark Shorts retain creator-added subtitles well inside
+        // the first/last 18%, so search only the *central action band*.
+        // Identical crop coordinates are used for reference and candidates.
+        val top=(frame.height*(if(portrait)0.30 else 0.16)).toInt()
+        val bottom=(frame.height*(if(portrait)0.35 else 0.18)).toInt()
+        val left=(frame.width*(if(portrait)0.07 else 0.05)).toInt()
+        return Bitmap.createBitmap(frame,left,top,
+            frame.width-2*left,frame.height-top-bottom)
     }
 
     /** 64-bit difference hash + grayscale standard deviation for flat frames. */
