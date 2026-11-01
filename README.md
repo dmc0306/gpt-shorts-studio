@@ -1,3 +1,10 @@
+## 0.19.1 — Chrome 인증 복귀 실패 진단 및 Chrome 탭 대안
+
+- Google 브랜드 채널 동의 후 Chrome에서 앱 복귀에 실패하며 `AUTH_CHROME_AUTHORIZE`로만 보이던 문제를 구분합니다. 응답 Intent가 없으면 이제 `AUTH_CHROME_NO_RESULT`로 표시하고, OAuth 예외가 있으면 안전한 정수 유형/코드만 제공합니다. 토큰·전체 URL·인증 코드는 공개하지 않습니다.
+- 기존 **Chrome에서 로그인 · 브랜드 채널 선택** 버튼을 유지하면서, 동일한 Android OAuth + PKCE를 사용하는 **Chrome 탭으로 로그인 · 복귀 오류 대안** 버튼을 추가했습니다. PC/ADB/별도 인증 서버는 필요하지 않습니다.
+- 두 방법 모두 실제 기기의 브랜드 채널/앱 복귀/토큰 갱신 검증이 필요하며 빌드/모의 테스트만으로 성공을 주장하지 않습니다. 상세 설정: `YOUTUBE_CHROME_AUTH.md`(소스 ZIP 안).
+- 앱 소스: `shorts-studio-source.zip`. 현재 패치는 `tool/patch_oauth_fix.py`에서 일회성 적용되었으며, 완료 후에도 소스 ZIP 기준으로 빌드합니다.
+
 ## 0.19.0 — 휴대폰 Chrome 직접 로그인, PC·인증 서버 없이
 
 - 사용자가 제공한 Android OAuth 클라이언트로 Chrome 앱에서 직접 로그인하고 앱 전용 URI로 돌아옵니다. Google Cloud의 Android 클라이언트 고급 설정에서 Custom URI scheme 허용을 켜고 저장해야 합니다. 자세한 설정은 YOUTUBE_CHROME_AUTH.md를 확인하세요.
