@@ -39,7 +39,7 @@ added='''            "benchmarkInspectCandidate" -> async(r) {
             }
 '''
 changed[native]=main.replace(anchor,added+anchor,1)
-assert changed["lib/benchmark_oneclick.dart"].count("OneClickExplorer")==1
+assert "class OneClickExplorer {" in changed["lib/benchmark_oneclick.dart"]
 assert changed["lib/benchmark_ui.dart"].count("원클릭 원본 탐색")==1
 assert changed["native/android/BenchmarkFrameExtractor.kt"].count("fun fingerprints(")==1
 with ZipFile(out,"w") as z:
