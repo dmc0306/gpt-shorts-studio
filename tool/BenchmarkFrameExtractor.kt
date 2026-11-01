@@ -35,6 +35,69 @@ object BenchmarkFrameExtractor {
         } finally { media.release() }
     }
 
+    /**
+     * Candidate video is sampled at 16 moments. Return compact visual hashes,
+     * not full frames, to avoid unnecessarily large platform-channel payloads.
+     */
+    fun fingerprints(file:File):List<Map<String,Any>> {
+        require(file.isFile&&file.length() in 10240L..(512L*1024*1024)) {
+            "후보 영상 파일 크기 또는 접근 오류"
+        }
+        val media=MediaMetadataRetriever()
+        try {
+            media.setDataSource(file.absolutePath)
+            val duration=media.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
+                ?:error("후보 영상 길이 확인 실패")
+            require(duration in 500L..600000L)
+            val result=mutableListOf<Map<String,Any>>()
+            for(i in 0 until 16) {
+                val ms=(duration*(i+0.5)/16).toLong().coerceIn(0,duration-1)
+                val frame=media.getScaledFrameAtTime(ms*1000L,
+                    MediaMetadataRetriever.OPTION_CLOSEST_SYNC,480,480)?:continue
+                try {
+                    val clean=centerCrop(frame)
+                    try {
+                        val info=perceptualHash(clean)
+                        result.add(mapOf("hash" to info.first, "contrast" to info.second,
+                            "timeMs" to ms))
+                    } finally {clean.recycle()}
+                } finally {frame.recycle()}
+            }
+            require(result.size>=4){"후보에서 비교할 장면이 너무 적어요."}
+            return result
+        } finally {media.release()}
+    }
+
+    private fun centerCrop(frame:Bitmap):Bitmap {
+        val portrait=frame.height>frame.width
+        val trimY=(frame.height*(if(portrait)0.18 else 0.10)).toInt()
+        val trimX=(frame.width*(if(portrait)0.06 else 0.04)).toInt()
+        return Bitmap.createBitmap(frame,trimX,trimY,
+            frame.width-2*trimX,frame.height-2*trimY)
+    }
+
+    /** 64-bit difference hash + grayscale standard deviation for flat frames. */
+    private fun perceptualHash(frame:Bitmap):Pair<String,Double> {
+        val thumbnail=Bitmap.createScaledBitmap(frame,9,8,true)
+        try {
+            val pixels=IntArray(9*8)
+            thumbnail.getPixels(pixels,0,9,0,0,9,8)
+            fun gray(p:Int):Int {
+                return (((p shr 16)and 255)*299+((p shr 8)and 255)*587+
+                    (p and 255)*114)/1000
+            }
+            val values=pixels.map(::gray)
+            var hash=0L
+            for(row in 0 until 8)for(column in 0 until 8){
+                hash=hash shl 1
+                if(values[row*9+column]>values[row*9+column+1])hash=hash or 1L
+            }
+            val mean=values.average()
+            val variation=values.sumOf {(it-mean)*(it-mean)}/values.size
+            return java.lang.Long.toHexString(hash).padStart(16,'0') to kotlin.math.sqrt(variation)
+        }finally{thumbnail.recycle()}
+    }
+
     private fun extractInternal(media:MediaMetadataRetriever): List<Map<String,Any>> {
         val duration=media.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
             ?:error("영상 재생시간을 확인하지 못했어요.")
@@ -49,12 +112,7 @@ object BenchmarkFrameExtractor {
                 // All frames: trim persistent subtitle/title overlays before
                 // sending images to Cloud Vision; previous code left the
                 // first and last samples completely untrimmed.
-                val portrait=frame.height>frame.width
-                val cutTop=(frame.height*(if(portrait)0.18 else 0.10)).toInt()
-                val cutLeft=(frame.width*(if(portrait)0.06 else 0.04)).toInt()
-                val cutHeight=frame.height-2*cutTop
-                val cutWidth=frame.width-2*cutLeft
-                val clean=Bitmap.createBitmap(frame,cutLeft,cutTop,cutWidth,cutHeight)
+                val clean=centerCrop(frame)
                 try {
                 val buffer=ByteArrayOutputStream()
                 check(clean.compress(Bitmap.CompressFormat.JPEG,82,buffer)){"영상 장면을 JPEG로 변환하지 못했어요."}
@@ -62,7 +120,9 @@ object BenchmarkFrameExtractor {
                 if(bytes.size in 100..1000000) {
                     result.add(mapOf("timeMs" to timeMs,
                         "crop" to true,
-                        "content" to Base64.encodeToString(bytes,Base64.NO_WRAP)))
+                        "content" to Base64.encodeToString(bytes,Base64.NO_WRAP),
+                        "hash" to perceptualHash(clean).first,
+                        "contrast" to perceptualHash(clean).second))
                 }
                 } finally {
                 if(clean !== frame)clean.recycle()
