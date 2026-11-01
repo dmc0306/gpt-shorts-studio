@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/apply-candidate-preflight.yml'
+      - 'tool/patch_candidate_preflight.py'
 permissions:
   contents: write
 jobs:
