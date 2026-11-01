@@ -22,6 +22,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
  BenchState state=BenchState();
  String message='';
  final framePreviews=<String,List<Uint8List>>{};
+ final fullFramePreviews=<String,List<Uint8List>>{};
  bool busy=false,loading=true;
  String? activeVideoId;
  bool cancelled=false;
@@ -108,13 +109,19 @@ class _BenchmarkState extends State<BenchmarkScreen>{
       }
     }
     if(frames==null||frames.isEmpty){report('영상 프레임 추출 실패');return;}
-    final previews=<Uint8List>[];
+    final previews=<Uint8List>[],uncropped=<Uint8List>[];
     for(final frame in frames){
       if(frame is Map&&frame['content'] is String){
         previews.add(base64Decode(frame['content'] as String));
+        final uncroppedBytes=frame['originalContent'];
+        uncropped.add(uncroppedBytes is String?
+          base64Decode(uncroppedBytes):base64Decode(frame['content'] as String));
       }
     }
-    if(mounted)setState(()=>framePreviews[v.id]=previews);
+    if(mounted)setState((){
+      framePreviews[v.id]=previews;
+      fullFramePreviews[v.id]=uncropped;
+    });
     final key=visionKeyText.text.trim().isNotEmpty?visionKeyText.text.trim():keyText.text.trim();
     final explorer=OneClickExplorer(key,(message)=>report(message));
     activeExplorer=explorer;
@@ -166,6 +173,18 @@ class _BenchmarkState extends State<BenchmarkScreen>{
     activeStream=null;
     if(mounted)setState(()=>activeVideoId=null);
   }
+ }
+ Future<void> shareFrameToLens(BenchVideo v,int index)async{
+   final originals=fullFramePreviews[v.id];
+   final crops=framePreviews[v.id];
+   final frames=(originals!=null&&index<originals.length)?originals:crops;
+   if(frames==null||index>=frames.length)return;
+   try{
+     await Native.call('benchmarkShareFrame',
+       {'content':base64Encode(frames[index])});
+   }catch(e){
+     report('이미지 검색 앱으로 공유하지 못했어요: $e');
+   }
  }
  Future<void> addOrigin(BenchVideo v)async{
   originText.clear();
@@ -260,14 +279,23 @@ class _BenchmarkState extends State<BenchmarkScreen>{
          label:Text(cancelled?'중단 처리 중':'검색 중단'))),
      ],
      if(framePreviews[v.id]?.isNotEmpty==true)...[
-       const Text('실제 검색에 사용한 장면 (영상 중앙부 · 상하단 편집 자막 제외 시도)',style:TextStyle(fontSize:12,fontWeight:FontWeight.bold)),
+       const Text('Cloud Vision 검색 장면 · 사진을 누르면 전체 프레임을 다른 역이미지 검색 앱으로 공유',style:TextStyle(fontSize:12,fontWeight:FontWeight.bold)),
        const SizedBox(height:6),
        SizedBox(height:124,child:ListView.separated(
          scrollDirection:Axis.horizontal,
          itemCount:framePreviews[v.id]!.length,
          separatorBuilder:(_,i)=>const SizedBox(width:6),
-         itemBuilder:(_,index)=>Image.memory(framePreviews[v.id]![index],
-           width:105,height:120,fit:BoxFit.cover))),
+         itemBuilder:(_,index)=>InkWell(
+           onTap:()=>shareFrameToLens(v,index),
+           child:Stack(children:[
+             Image.memory(framePreviews[v.id]![index],
+               width:105,height:120,fit:BoxFit.cover),
+             const Positioned(right:4,bottom:4,
+               child:Icon(Icons.image_search,color:Colors.white,size:24)),
+           ])))),
+       const SizedBox(height:4),
+       const Text('프레임을 터치해 Google Lens 등으로 검색하세요. 검색 앱에서 인물·물체만 선택하면 추가 자막을 피할 수 있어요. 검색 결과 확인은 수동입니다.',
+          style:TextStyle(fontSize:12)),
        const SizedBox(height:8),
      ],
      if(!busy&&state.diagnostics[v.id]?.isNotEmpty==true)
