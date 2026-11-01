@@ -1,0 +1,25 @@
+name: Apply concise original-search error reporting
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/apply-provider-errors.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Patch benchmark provider failure messages
+        run: python3 tool/patch_provider_errors.py
+      - name: Commit source ZIP
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add shorts-studio-source.zip
+          git diff --cached --quiet && { echo "No archive changes"; exit 1; }
+          git commit -m "Show short actionable candidate-stream errors without raw HTML"
+          git push
