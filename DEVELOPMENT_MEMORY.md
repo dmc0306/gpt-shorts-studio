@@ -2,6 +2,7 @@
 
 - Initial 0.17.0 Actions analysis/tests/APK/signature passed. Final review caught an over-broad text edit disposing the server field controllers in the cancel callback. Removed it and added a UI test that cancels then edits the server address. Only screen disposal releases controllers.
 - CI 41280729760: 101 Flutter tests passed, new cancel-settings UI test failed because scrollUntilVisible matched multiple Scrollables (outer ListView and inner text-field scroll views). Target the outer Scrollable explicitly; do not remove the cancellation/edit regression.
+- CI 41280920935: subsequent test failure was Finder.first evaluated before the lazy ListView rebuilt an offscreen TextField. Use a label-specific predicate without first so scrollUntilVisible can search across lazy children.
 - Label legacy PC connection explicitly so its ADB requirement cannot be confused with the primary server mode.
 
 ## 0.17.0 — HTTPS server authentication
