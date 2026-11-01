@@ -1,3 +1,11 @@
+## 0.18.1 — Preserve automatic Google authorization exit diagnostics
+
+- Actual user device observation: selecting Gmail closed the Google UI automatically; no Brand identities were shown. AUTH_NATIVE_CANCELLED was our own blanket classification, not evidence of explicit user cancellation or SDK status 16.
+- Parse any returned Intent with getAuthorizationResultFromIntent even when Activity resultCode is canceled, so SDK ApiException status is preserved. Null Intent is AUTH_NATIVE_NO_RESULT (cause unknown). Explicit app cancellation has a separate code/origin. Never copy raw Intent extras, exception messages, OAuth URLs or credentials.
+- Copy safe diagnostic fields only: SDK status, activity result/data presence/origin, selected scope mode, selection flag, public package/certificate SHA-1 and Play services version. Report metadata does not claim the chooser exposed Brand identities.
+- Default probe now requests readonly only; optional readonly+upload comparison and SELECT_ACCOUNT on/off allow isolating scope/chooser effects without another APK. Both paths remain read-only API probes and do not change upload preferences.
+- Regression tests preserve returned SDK diagnostics for canceled activity results, unknown no-data exit, redaction and explicit scope/selection arguments. Actual Google completion/Brand support remains unverified until device report.
+
 ## 0.18.0 — Android direct authorization diagnostic
 
 - User verified that explicitly selecting the Brand channel in the web API Explorer returns the intended channel. The remaining unknown is Android account/Brand chooser behavior, not public channel existence.
