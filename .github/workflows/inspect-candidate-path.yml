@@ -1,0 +1,24 @@
+name: Inspect candidate import and selected version
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-candidate-path.yml'
+permissions: {contents: read}
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect native candidate paths only
+        run: |
+          python3 - <<'PY'
+          import zipfile
+          z=zipfile.ZipFile('shorts-studio-source.zip')
+          for name in ['pubspec.yaml','native/android/MainActivity.kt','lib/tiktok_download.dart','lib/model.dart']:
+            lines=z.read(name).decode().splitlines()
+            print('SOURCE',name)
+            for i,line in enumerate(lines):
+              if any(x in line for x in ['version:', 'benchmarkInspectCandidate','sourceDir','filesDir,"sources"','sourceDir=','fun importUri','deleteLocalVideo','"downloadTikTok"','Clip.fromJson','path" to','saveVideo','_downloadUrl','tempDir','sources/','filesDir']):
+                for k in range(max(0,i-2),min(len(lines),i+7)):
+                  print(f'{k+1}: {lines[k][:300]}')
+          PY
