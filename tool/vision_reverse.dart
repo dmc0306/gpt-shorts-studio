@@ -82,10 +82,12 @@ class FrameReverseSearch {
 
   /// Broad discovery is separate from source confirmation. One matching frame
   /// is enough to *investigate* a video, never to label it verified.
+  /// A page *mentioning* an image is not proof that a linked social video
+  /// includes it. Only page-local full/partial image evidence is allowed into
+  /// automatic candidate verification; weaker pages remain manual leads.
   static List<BenchOrigin> discoveryCandidates(Object? input,String benchmarkId){
     if(input is! List)throw const FormatException('Vision 후보 검색 응답 오류');
-    final scores=<String,int>{};
-    final hits=<String,Set<int>>{};
+    final evidence=<String,Map<int,int>>{};
     for(var i=0;i<input.length;i++){
       final response=input[i];
       if(response is! Map)continue;
@@ -105,20 +107,37 @@ class FrameReverseSearch {
             uri.path=='/shorts/$benchmarkId'))continue;
         final full=page['fullMatchingImages'];
         final partial=page['partialMatchingImages'];
-        final direct=full is List&&full.isNotEmpty;
-        final cropped=partial is List&&partial.isNotEmpty;
-        final quality=direct?3:cropped?2:1;
-        final byMoment=hits.putIfAbsent(url,()=>{});
-        if(byMoment.add(i))scores[url]=(scores[url]??0)+quality;
+        final direct=full is List&&full.any((x)=>x is Map&&x['url'] is String);
+        final cropped=partial is List&&partial.any((x)=>x is Map&&x['url'] is String);
+        final category=direct?3:cropped?2:1;
+        final hits=evidence.putIfAbsent(url,()=>{});
+        if(category>(hits[i]??0))hits[i]=category;
       }
     }
-    final sorted=scores.keys.toList()..sort((a,b){
-      final byScore=scores[b]!.compareTo(scores[a]!);
-      return byScore==0?(hits[b]!.length.compareTo(hits[a]!.length)):byScore;
+    final direct=evidence.entries.where((e)=>e.value.values.any((v)=>v>=2)).toList();
+    final weak=evidence.entries.where((e)=>e.value.values.every((v)=>v==1)).toList();
+    int score(Map<int,int> hits)=>
+      hits.values.where((v)=>v==3).length*7+
+      hits.values.where((v)=>v==2).length*4+
+      hits.values.where((v)=>v==1).length;
+    direct.sort((a,b){
+      final c=score(b.value).compareTo(score(a.value));
+      return c!=0?c:b.value.length.compareTo(a.value.length);
     });
-    return sorted.take(24).map((url)=>BenchOrigin(url,
-      '이미지 검색에서 ${hits[url]!.length}개 장면의 페이지 후보로 발견됨 · 영상 프레임 대조 전 · 원본 확정 아님',
-      '역이미지 탐색 후보')).toList();
+    weak.sort((a,b)=>b.value.length.compareTo(a.value.length));
+    return [
+      for(final e in direct.take(12))
+        BenchOrigin(e.key,
+          '직접 이미지 일치 근거 ${e.value.values.where((v)=>v>=2).length}개 장면 '
+          '(완전 일치 ${e.value.values.where((v)=>v==3).length}개) · '
+          '게시물의 실제 영상 일치 여부는 별도 검증 필요',
+          '이미지 직접일치 후보'),
+      for(final e in weak.take(3))
+        BenchOrigin(e.key,
+          '관련 웹페이지에서 발견 · 페이지 내 직접 이미지 일치 근거 없음 · '
+          '자동 동영상 검증 제외 · 수동 참고용',
+          '연관 페이지만 확인'),
+    ];
   }
 
   Future<List<BenchOrigin>> discover(String benchmarkId,List<dynamic> frames) async {
