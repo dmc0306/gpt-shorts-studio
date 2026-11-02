@@ -136,8 +136,9 @@ void main(){
        {'url':'https://www.youtube.com/watch?v=12345678901'}]}}
    ],'ABCDEFGHIJK');
    expect(suggestions.length,2);
-   expect(suggestions.first.source,'역이미지 탐색 후보');
-   expect(suggestions.first.evidence,contains('원본 확정 아님'));
+   expect(suggestions.first.source,'이미지 직접일치 후보');
+   expect(suggestions.first.evidence,contains('직접 이미지 일치 근거'));
+   expect(suggestions.last.source,'연관 페이지만 확인');
  });
  test('Visual verification requires distinct matching reference and candidate scenes',(){
    final reference=[
@@ -264,6 +265,51 @@ void main(){
    expect(normalOrigin('https://vt.tiktok.com.evil.example/ZSp11jbJd/'),isNull);
    expect(normalOrigin('http://vt.tiktok.com/ZSp11jbJd/'),isNull);
    expect(normalOrigin('https://vt.tiktok.com/'),isNull);
+ });
+
+ test('Direct frame-image matches rank ahead of unrelated high-score social pages',(){
+   final raw=[
+     {'webDetection':{'pagesWithMatchingImages':[
+       {'url':'https://www.instagram.com/reel/strongA/',
+        'fullMatchingImages':[{'url':'https://img.example/1.jpg'}]},
+       {'url':'https://www.youtube.com/watch?v=weakweak123','score':99999},
+       {'url':'https://www.tiktok.com/@user/video/123456',
+        'partialMatchingImages':[{'url':'https://img.example/2.jpg'}]}
+     ]}},
+     {'webDetection':{'pagesWithMatchingImages':[
+       {'url':'https://www.instagram.com/reel/strongA/',
+        'partialMatchingImages':[{'url':'https://img.example/3.jpg'}]},
+       {'url':'https://www.instagram.com/reel/weak123/'}
+     ]}},
+   ];
+   final sorted=FrameReverseSearch.discoveryCandidates(raw,'AbcDefGhI12');
+   expect(sorted[0].url,'https://www.instagram.com/reel/strongA/');
+   expect(sorted[0].source,'이미지 직접일치 후보');
+   expect(sorted[1].source,'이미지 직접일치 후보');
+   expect(sorted.where((p)=>p.source=='연관 페이지만 확인').length,2);
+   expect(sorted.last.source,'연관 페이지만 확인');
+ });
+ test('Page-only leads are capped to 3 and never treated as direct matches',(){
+   final list=FrameReverseSearch.discoveryCandidates([
+     {'webDetection':{'pagesWithMatchingImages':[
+       for(var i=0;i<12;i++)
+         {'url':'https://www.instagram.com/reel/p$i/'}
+     ]}}
+   ],'AbcDefGhI12');
+   expect(list.length,3);
+   expect(list.every((e)=>e.source=='연관 페이지만 확인'),true);
+ });
+ test('Rejected links persist per benchmark and can be cleared',(){
+   final state=BenchState();
+   state.rejected['AbcDefGhI12']={
+     'https://www.youtube.com/watch?v=12345678901',
+     'https://www.instagram.com/reel/bad123/',
+   };
+   final recovered=BenchState.fromJson(state.toJson());
+   expect(recovered.rejected['AbcDefGhI12']!.length,2);
+   expect(recovered.rejected['OtherVid012'],isNull);
+   recovered.rejected.remove('AbcDefGhI12');
+   expect(recovered.rejected.isEmpty,true);
  });
 
 }
