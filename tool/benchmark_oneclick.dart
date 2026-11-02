@@ -76,7 +76,10 @@ class VideoMatch {
       if(value is! Map)continue;
       final hash=value['hash'] as String? ?? '';
       final contrast=(value['contrast'] as num? ?? 0).toDouble();
-      if(hash.length==16&&contrast>=15)candidates.add((hash:hash,contrast:contrast,index:i));
+      if(hash.length==16&&contrast>=15){
+        final moment=(value['timeMs'] as num?)?.toInt()??i;
+        candidates.add((hash:hash,contrast:contrast,index:moment));
+      }
     }
     final observed=<int>{},matchedReference=<int>{};
     var best=64;
@@ -201,7 +204,7 @@ class OneClickExplorer {
     return id!=null&&RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(id)?id:null;
   }
 
-  Future<CandidateCheck> inspect(BenchOrigin origin,List<dynamic> reference,{int? expectedLength})async{
+  Future<CandidateCheck> inspect(BenchOrigin origin,List<dynamic> reference)async{
     _check();
     String? path;
     Clip? downloaded;
