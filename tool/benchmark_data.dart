@@ -70,12 +70,16 @@ class BenchState {
   final origins=<String,List<BenchOrigin>>{},chosen=<String,String>{},rights=<String,String>{},proof=<String,String>{};
   /// User supplied, not an automated frame match.
   final confirmed=<String,String>{...benchmarkGroundTruth};
+  /// Explicitly rejected source links for this benchmark video.
+  final rejected=<String,Set<String>>{};
   final diagnostics=<String,String>{};
   Map<String,dynamic> toJson()=>{'channels':channels,'top':top.map((k,v)=>MapEntry(k,v.map((e)=>e.toJson()).toList())),
     'scanned':scanned,'complete':complete,'seen':seen.toList(),'selected':selected,
     'origins':origins.map((k,v)=>MapEntry(k,v.map((e)=>e.toJson()).toList())),
     'chosen':chosen,'rights':rights,'proof':proof,
-    'confirmed':confirmed,'diagnostics':diagnostics};
+    'confirmed':confirmed,
+    'rejected':rejected.map((k,v)=>MapEntry(k,v.toList())),
+    'diagnostics':diagnostics};
   factory BenchState.fromJson(Map raw){
     final b=BenchState();
     if(raw['channels'] is Map){b.channels.clear();(raw['channels'] as Map).forEach((k,v){if(k is String&&v is String&&RegExp(r'^UC[\w-]{22}$').hasMatch(k))b.channels[k]=v;});}
@@ -168,6 +172,13 @@ class BenchApi {
           final safe=normalOrigin(v);
           if(safe!=null)b.confirmed[k]=safe;
         }
+      });
+    }
+    if(raw['rejected'] is Map){
+      (raw['rejected'] as Map).forEach((key,value){
+        if(key is! String||value is! List) return;
+        final valid=value.whereType<String>().map(normalOrigin).whereType<String>().toSet();
+        if(valid.isNotEmpty)b.rejected[key]=valid;
       });
     }
     if(raw['diagnostics'] is Map){
