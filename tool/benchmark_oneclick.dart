@@ -63,46 +63,65 @@ class OneClickResult {
 /// compilation. Two *distinct* scenes with low dHash distance are required.
 class VideoMatch {
   static int distance(String a,String b){
-    if(!RegExp(r'^[0-9a-fA-F]{16}$').hasMatch(a)||!RegExp(r'^[0-9a-fA-F]{16}$').hasMatch(b))return 64;
+    if(!RegExp(r'^[0-9a-fA-F]{16}$').hasMatch(a)||
+       !RegExp(r'^[0-9a-fA-F]{16}$').hasMatch(b))return 64;
     var diff=BigInt.parse(a,radix:16)^BigInt.parse(b,radix:16);
     var bits=0;
     while(diff>BigInt.zero){diff=diff&(diff-BigInt.one);bits++;}
     return bits;
   }
-  static ({int matched,int best,int distinctCandidate}) match(List<dynamic> reference,List<dynamic> candidate){
-    final candidates=<({String hash,double contrast,int index})>[];
-    for(var i=0;i<candidate.length;i++){
-      final value=candidate[i];
-      if(value is! Map)continue;
-      final hash=value['hash'] as String? ?? '';
-      final contrast=(value['contrast'] as num? ?? 0).toDouble();
-      if(hash.length==16&&contrast>=15){
-        final moment=(value['timeMs'] as num?)?.toInt()??i;
-        candidates.add((hash:hash,contrast:contrast,index:moment));
-      }
-    }
-    final observed=<int>{},matchedReference=<int>{};
-    var best=64;
+  /// Same crop, distinct scenes, chronological order; one moment counts once.
+  static ({int matched,int best,int distinctCandidate}) match(
+      List<dynamic> reference,List<dynamic> candidate){
+    final uniqueRefs=<({int crop,String hash})>[];
     for(var i=0;i<reference.length;i++){
       final item=reference[i];
       if(item is! Map)continue;
       final hash=item['hash'] as String? ?? '';
-      final contrast=(item['contrast'] as num? ?? 0).toDouble();
-      if(hash.length!=16||contrast<15)continue;
-      var minDistance=64,closest=-1;
-      for(final sample in candidates){
-        final d=distance(hash,sample.hash);
-        if(d<minDistance){minDistance=d;closest=sample.index;}
-      }
-      if(minDistance<best)best=minDistance;
-      if(minDistance<=9&&closest>=0){
-        matchedReference.add(i);observed.add(closest);
+      if(distance(hash,hash)!=0||(item['contrast'] as num? ?? 0)<15)continue;
+      if(uniqueRefs.any((r)=>distance(r.hash,hash)<10))continue;
+      uniqueRefs.add((crop:i,hash:hash));
+    }
+    final hits=<({int ref,int time,int distance})>[];
+    for(var i=0;i<uniqueRefs.length;i++){
+      final r=uniqueRefs[i];
+      for(final sample in candidate){
+        if(sample is! Map||sample['cropIndex'] is! num||
+           sample['timeMs'] is! num)continue;
+        if((sample['cropIndex'] as num).toInt()!=r.crop)continue;
+        if((sample['contrast'] as num? ?? 0)<15)continue;
+        final hash=sample['hash'] as String? ?? '';
+        final d=distance(r.hash,hash);
+        if(d<=6)hits.add((ref:i,
+          time:(sample['timeMs'] as num).toInt(),distance:d));
       }
     }
-    return(matched:matchedReference.length,best:best,distinctCandidate:observed.length);
+    hits.sort((a,b){
+      final c=a.ref.compareTo(b.ref);
+      return c!=0?c:a.time.compareTo(b.time);
+    });
+    final counts=List<int>.filled(hits.length,1);
+    final sums=List<int>.generate(hits.length,(i)=>hits[i].distance);
+    var longest=0,leastSum=1<<30,best=64;
+    for(var i=0;i<hits.length;i++){
+      for(var j=0;j<i;j++){
+        if(hits[j].ref>=hits[i].ref||
+           hits[j].time+500>hits[i].time)continue;
+        final next=counts[j]+1;
+        final nextSum=sums[j]+hits[i].distance;
+        if(next>counts[i]||(next==counts[i]&&nextSum<sums[i])){
+          counts[i]=next;sums[i]=nextSum;
+        }
+      }
+      if(counts[i]>longest||(counts[i]==longest&&sums[i]<leastSum)){
+        longest=counts[i];leastSum=sums[i];
+      }
+      if(hits[i].distance<best)best=hits[i].distance;
+    }
+    return(matched:longest,best:best,distinctCandidate:longest);
   }
   static bool strong(({int matched,int best,int distinctCandidate}) m)=>
-    m.matched>=2&&m.distinctCandidate>=2&&m.best<=6;
+    m.matched>=3&&m.distinctCandidate>=3&&m.best<=5;
 }
 
 /// ML Kit OCR bounding boxes only; repeated top/bottom text across sampled
@@ -120,7 +139,7 @@ class OverlayCheck {
       final letters=(raw['letters'] as num? ?? 0).toInt();
       final time=(raw['time'] as num? ?? -1).toDouble();
       if(letters<3||width<.18||time<0)continue;
-      if(!(y<.24||y>.66))continue;
+      if(y<.08||y>.94)continue; // Include creator-added middle captions.
       final key=((y*12).round()*20)+(x*4).round();
       cells.putIfAbsent(key,()=>{}).add(time.floor());
     }
@@ -204,6 +223,17 @@ class OneClickExplorer {
     }
     if(uri.host=='youtu.be'&&uri.pathSegments.isNotEmpty)id=uri.pathSegments.first;
     return id!=null&&RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(id)?id:null;
+  }
+
+  /// Prioritize direct image matches, not simply platform or clip duration.
+  static int evidenceScore(BenchOrigin origin){
+    if(origin.source!='이미지 직접일치 후보')return 0;
+    final moments=RegExp(r'직접 이미지 일치 근거 (\d+)개 장면')
+      .firstMatch(origin.evidence);
+    final full=RegExp(r'완전 일치 (\d+)개').firstMatch(origin.evidence);
+    final n=int.tryParse(moments?.group(1)??'0')??0;
+    final f=int.tryParse(full?.group(1)??'0')??0;
+    return n.clamp(0,10).toInt()*10+f.clamp(0,10).toInt()*3;
   }
 
   Future<CandidateCheck> inspect(BenchOrigin origin,List<dynamic> reference)async{
@@ -327,16 +357,15 @@ class OneClickExplorer {
     final lengths=await BenchmarkDuration.youtubeLengths(youtubeApiKey,allIds);
     _check();
     int priority(BenchOrigin item){
-      // A social page alone is not enough evidence to spend a video-download
-      // verification slot; show it separately as an optional manual lead.
-      if(item.source=='연관 페이지만 확인')return 5;
+      if(item.source=='연관 페이지만 확인')return 10000;
       final id=youtubeId(item.url);
-      if(id!=null){
+      if(id!=null&&benchmarkSeconds>0){
         final duration=lengths[id];
-        if(duration==null)return 3;
-        return BenchmarkDuration.similar(benchmarkSeconds,duration)?0:4;
+        if(duration==null)return 9000;
+        if(!BenchmarkDuration.similar(benchmarkSeconds,duration))return 9500;
       }
-      return tiktokUrl(item.url)!=null?1:2;
+      if(id==null&&tiktokUrl(item.url)==null)return 8000;
+      return 1000-evidenceScore(item)*10+(id!=null?0:1);
     }
     final ordered=discovered.toList()..sort((a,b)=>priority(a).compareTo(priority(b)));
     final results=<CandidateCheck>[];

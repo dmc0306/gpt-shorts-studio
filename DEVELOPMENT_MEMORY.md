@@ -276,3 +276,10 @@ Cloud Vision WebDetection pagesWithMatchingImages 자체는 동일 영상 증거
 UI '원본 아님'으로 확인한 링크는 BenchState.rejected[videoId]로 영속 저장하고 향후 검색에서 제외. 초기화 지원. '원본 확인·저장'은 BenchState.confirmed[videoId]로 영속 보존, 자동 예측 성공으로 집계하지 않음. 수동 추가된 링크도 재검색 시 보존.
 수정: tool/vision_reverse.dart, benchmark_oneclick.dart, benchmark_data.dart, benchmark_ui.dart, benchmark_tests.dart. ZIP 반영 tool/patch_precision_feedback.py. CI에서 데이터 소스 파서 손상 및 UI 변수 shadowing, 후미 중복 BenchApi 코드 확인 후 복구. 최종 패치 tool/patch_precision_tail.py, v0.21.14+73.
 최종 검증 https://github.com/dmc0306/gpt-shorts-studio/actions/runs/41455616422 SUCCESS: flutter analyze, flutter test, Android 고정 서명 APK 빌드, 서명 확인, Artifact upload 모두 성공. Artifact shorts-studio-debug-apk ID 13145993904. 실기기 원본 탐색 적중률 실측 전; 검색되지 않던 원본 발견까지 보장하지 않음.
+## 2026-11-02 — v0.21.15+74 프레임 시간순서/크롭 정합 기반 원본 검색 정밀도
+
+직전 v0.21.14에서 사용자 제보: 정확히 일치하는 원본 하나를 수동으로 확인했으나 자동 추천한 후보 대다수는 무관했다. 원인 추정: 후보 검증 dHash가 2장만 일치하면 통과하며 서로 다른 검색 크롭 영역도 교차 매칭되고 시간상 역순 장면/반복 장면도 통과 가능했다. 또한 후보 영상의 길이 일치로 YouTube 결과가 강한 이미지 증거를 가진 TikTok보다 먼저 검증되는 우선순위였다.
+
+v0.21.15 변경: Kotlin 후보 프레임 지문에 cropIndex 추가. 후보와 참조의 동일 크롭 위치로만 비교하고, 정지/중복 참조 장면은 독립 증거에서 제외. 3장 이상 서로 다른 장면이 후보에서 500ms 이상 간격을 두고 동일한 시간 순서로 일치해야 자동 확인. 참조·후보 프레임 검색은 OPTION_CLOSEST로 키프레임 중복 위험 완화. 화면 중앙에 오래 남는 기존 편집 자막도 의심 판정에 포함. 원본 후보 순서는 직접 이미지 일치 장면 수/완전 일치 근거를 먼저, 길이 확인은 YouTube 다운로드 적격 조건으로만 반영. 사용자 제공 원본/오답 링크 피드백, 기존 자동 제작 흐름은 보존.
+
+단위 회귀 검사: 크롭 인덱스, 역순 장면, 반복되는 정지 화면, 동일 타임스탬프, 중앙 자막, 증거 정렬. 보수적 검증으로 오탐은 감소할 것으로 기대하지만 검색 엔진 색인 부족 및 TikTok/YouTube 스트림 제한은 개선하지 못한다. CI 통과와 실기기 실제 원본 정확도 향상은 별도로 확인해야 한다. 확인된 원본 예시 NPom9sHH2J0 ↔ https://vt.tiktok.com/ZSp11jbJd/는 사용자 제공 정답으로만 유지.

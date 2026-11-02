@@ -140,23 +140,57 @@ void main(){
    expect(suggestions.first.evidence,contains('직접 이미지 일치 근거'));
    expect(suggestions.last.source,'연관 페이지만 확인');
  });
- test('Visual verification requires distinct matching reference and candidate scenes',(){
+
+ test('Visual matching requires 3 distinct ordered scenes and aligned crops',(){
    final reference=[
-     {'hash':'aaaaaaaaaaaaaaaa','contrast':38},
-     {'hash':'5555555555555555','contrast':52},
+     {'hash':'aaaaaaaaaaaaaaaa','contrast':38,'timeMs':1000},
+     {'hash':'5555555555555555','contrast':52,'timeMs':3000},
+     {'hash':'cccccccccccccccc','contrast':42,'timeMs':5000},
    ];
    final candidate=[
-     {'hash':'aaaaaaaaaaaaaaaa','contrast':38},
-     {'hash':'5555555555555555','contrast':52},
-     {'hash':'0000000000000000','contrast':53},
+     {'hash':'aaaaaaaaaaaaaaaa','contrast':38,'timeMs':1200,'cropIndex':0},
+     {'hash':'5555555555555555','contrast':52,'timeMs':3200,'cropIndex':1},
+     {'hash':'cccccccccccccccc','contrast':42,'timeMs':5200,'cropIndex':2},
    ];
    final verified=VideoMatch.match(reference,candidate);
-   expect(verified.matched,2);
-   expect(verified.distinctCandidate,2);
+   expect(verified.matched,3);
+   expect(verified.distinctCandidate,3);
    expect(verified.best,0);
    expect(VideoMatch.strong(verified),true);
-   final single=VideoMatch.match(reference,[candidate.first]);
-   expect(VideoMatch.strong(single),false);
+   expect(VideoMatch.strong(
+     VideoMatch.match(reference,candidate.take(2).toList())),false);
+   final reversed=[
+     {...candidate[0],'timeMs':5200},
+     {...candidate[1],'timeMs':3200},
+     {...candidate[2],'timeMs':1200},
+   ];
+   expect(VideoMatch.strong(VideoMatch.match(reference,reversed)),false);
+   final wrongCrops=[
+     for(var i=0;i<candidate.length;i++)
+       {...candidate[i],'cropIndex':(i+1)%3},
+   ];
+   expect(VideoMatch.match(reference,wrongCrops).matched,0);
+ });
+ test('Repeated static scene does not count as multiple frames',(){
+   final reference=[
+     for(var i=0;i<3;i++)
+       {'hash':'aaaaaaaaaaaaaaaa','contrast':50,'timeMs':1000*i},
+   ];
+   final candidate=[
+     for(var i=0;i<3;i++)
+       {'hash':'aaaaaaaaaaaaaaaa','contrast':50,
+        'timeMs':1000+i*1000,'cropIndex':i},
+   ];
+   expect(VideoMatch.match(reference,candidate).matched,1);
+   expect(VideoMatch.strong(VideoMatch.match(reference,candidate)),false);
+ });
+ test('Direct visual evidence outranks a merely compatible video duration',(){
+   const good=BenchOrigin('https://vt.tiktok.com/AbCdEf12/',
+     '직접 이미지 일치 근거 3개 장면 (완전 일치 2개)','이미지 직접일치 후보');
+   const weak=BenchOrigin('https://www.youtube.com/watch?v=Abcdefgh123',
+     '직접 이미지 일치 근거 1개 장면 (완전 일치 0개)','이미지 직접일치 후보');
+   expect(OneClickExplorer.evidenceScore(good),
+     greaterThan(OneClickExplorer.evidenceScore(weak)));
  });
  test('Scene similarity alone does not prove an original with inserted captions',(){
    final overlay=<String,dynamic>{'lines':[
@@ -168,6 +202,10 @@ void main(){
      {'x':.2,'y':.43,'w':.3,'letters':6,'time':1},
    ]}),false);
    expect(OverlayCheck.suspicious({}),true);
+   expect(OverlayCheck.suspicious({'lines':[
+     for(final t in [1,2,3])
+       {'x':.2,'y':.46,'w':.61,'letters':9,'time':t,'watermark':false},
+   ]}),true);
  });
  test('YouTube original candidate links are strictly video IDs',(){
    expect(OneClickExplorer.youtubeId('https://www.youtube.com/shorts/AbcDefGhI12'),'AbcDefGhI12');
@@ -228,17 +266,17 @@ void main(){
    expect(BenchmarkDuration.label(42,null),contains('확인 불가'));
    expect(BenchmarkDuration.label(42,60),contains('길이 불일치'));
  });
- test('Multiple OCR crops from one candidate time do not fake distinct scenes',(){
+ test('Several crop hits at one timestamp count as one candidate scene',(){
    final reference=[
      {'hash':'aaaaaaaaaaaaaaaa','contrast':42},
      {'hash':'5555555555555555','contrast':42},
    ];
    final sameFrame=[
-     {'hash':'aaaaaaaaaaaaaaaa','contrast':44,'timeMs':2000},
-     {'hash':'5555555555555555','contrast':44,'timeMs':2000},
+     {'hash':'aaaaaaaaaaaaaaaa','contrast':44,'timeMs':2000,'cropIndex':0},
+     {'hash':'5555555555555555','contrast':44,'timeMs':2000,'cropIndex':1},
    ];
    final m=VideoMatch.match(reference,sameFrame);
-   expect(m.matched,2);
+   expect(m.matched,1);
    expect(m.distinctCandidate,1);
    expect(VideoMatch.strong(m),false);
  });
