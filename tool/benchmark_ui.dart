@@ -147,10 +147,10 @@ class _BenchmarkState extends State<BenchmarkScreen>{
         item.status=='weak'?'연관 페이지만 확인':'검증되지 않은 검색 후보'));
     }
     // Preserve user-supplied original links across future image searches.
-    final manual=(state.origins[v.id]??<BenchOrigin>[])
+    final manualSources=(state.origins[v.id]??<BenchOrigin>[])
         .where((x)=>x.source=='직접 추가').toList();
-    state.origins[v.id]=[...manual,
-      ...visible.where((x)=>!manual.any((m)=>m.url==x.url))];
+    state.origins[v.id]=[...manualSources,
+      ...visible.where((x)=>!manualSources.any((m)=>m.url==x.url))];
     final confirmed=state.confirmed[v.id];
     if(confirmed!=null){
       state.chosen[v.id]=confirmed;
