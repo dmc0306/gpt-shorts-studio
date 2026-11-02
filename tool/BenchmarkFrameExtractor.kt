@@ -68,7 +68,7 @@ object BenchmarkFrameExtractor {
                       try{
                         val info=perceptualHash(clean)
                         result.add(mapOf("hash" to info.first,"contrast" to info.second,
-                            "timeMs" to ms))
+                            "timeMs" to ms,"durationMs" to duration))
                       }finally{clean.recycle()}
                     }
                 } finally {frame.recycle()}
