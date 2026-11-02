@@ -269,3 +269,10 @@ CI results and device behavior must be reported separately. Passing CI does not 
 코드: `tool/BenchmarkOcrCrop.kt` 신규, `tool/BenchmarkFrameExtractor.kt`, `tool/benchmark_duration.dart`, `tool/benchmark_oneclick.dart`, `tool/benchmark_ui.dart`, `tool/benchmark_tests.dart`. 통합: `tool/patch_ocr_duration.py`; 분산 장면 보강 `tool/patch_ocr_spread.py`. 버전 v0.21.10+69.
 
 검증: GitHub Actions https://github.com/dmc0306/gpt-shorts-studio/actions/runs/41367125984 성공: Flutter analyze, Flutter 전체 테스트, 서명 APK 빌드, 고정 인증서 검증, artifact 업로드 통과. APK artifact `shorts-studio-debug-apk` ID 13107124033. 실기기 OCR 검색 이미지 품질 및 실제 원본 발견률 미검증. Google Cloud Vision 웹 이미지 색인이 원본을 포함하지 않으면 결과가 계속 없을 수 있음. 자동화된 플랫폼 스트림 제한 문제도 그대로 존재할 수 있음.
+
+## 2026-11-02 — v0.21.14+73 원본 검색 후보 오탐 억제 및 사용자 검증 피드백
+실기기 검색 화면에서 동일 영상 일부의 원본 Instagram 릴스는 사용자가 수동으로 확인했지만, Cloud Vision이 자동 추천한 대부분의 YouTube/Instagram 게시물은 실제 관련 없는 것으로 나타남. 검색 참조 프레임에는 여러 서로 다른 장면과 텍스트가 포함됨.
+Cloud Vision WebDetection pagesWithMatchingImages 자체는 동일 영상 증거가 아님. 이를 fullMatchingImages/partialMatchingImages로 페이지 내부 이미지 일치가 있는 경우와 단순 페이지 일치만 있는 경우로 분류. 직접 일치 증거가 있으면 우선순위에 반영, 약한 페이지는 최대 3개만 수동 참고로 표시하고 자동 스트림 조회/길이검사 슬롯에서 제외. 이미지 직접 일치도 동영상 동일성은 입증하지 못함.
+UI '원본 아님'으로 확인한 링크는 BenchState.rejected[videoId]로 영속 저장하고 향후 검색에서 제외. 초기화 지원. '원본 확인·저장'은 BenchState.confirmed[videoId]로 영속 보존, 자동 예측 성공으로 집계하지 않음. 수동 추가된 링크도 재검색 시 보존.
+수정: tool/vision_reverse.dart, benchmark_oneclick.dart, benchmark_data.dart, benchmark_ui.dart, benchmark_tests.dart. ZIP 반영 tool/patch_precision_feedback.py. CI에서 데이터 소스 파서 손상 및 UI 변수 shadowing, 후미 중복 BenchApi 코드 확인 후 복구. 최종 패치 tool/patch_precision_tail.py, v0.21.14+73.
+최종 검증 https://github.com/dmc0306/gpt-shorts-studio/actions/runs/41455616422 SUCCESS: flutter analyze, flutter test, Android 고정 서명 APK 빌드, 서명 확인, Artifact upload 모두 성공. Artifact shorts-studio-debug-apk ID 13145993904. 실기기 원본 탐색 적중률 실측 전; 검색되지 않던 원본 발견까지 보장하지 않음.
