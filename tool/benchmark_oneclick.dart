@@ -203,6 +203,31 @@ class OneClickExplorer {
   final int benchmarkSeconds;
   final Set<String> ignoredUrls;
   final void Function(String message) report;
+  /// Distinct search windows prevent re-querying exactly the same images.
+  /// Never allow an endless loop that burns API quota on identical responses.
+  static List<List<dynamic>> frameBatches(List<dynamic> frames,{bool continuous=false}){
+    if(frames.length<3)return [];
+    final chronological=frames.toList()..sort((a,b){
+      final at=a is Map?(a['timeMs'] as num? ?? 0).toInt():0;
+      final bt=b is Map?(b['timeMs'] as num? ?? 0).toInt():0;
+      return at.compareTo(bt);
+    });
+    final take=continuous?(chronological.length<5?chronological.length:5):
+      (chronological.length<6?chronological.length:6);
+    final rounds=continuous?(chronological.length<6?chronological.length:6):1;
+    final batches=<List<dynamic>>[];
+    final signatures=<String>{};
+    for(var round=0;round<rounds;round++){
+      final indices=<int>[
+        for(var i=0;i<take;i++) (i+round)%chronological.length,
+      ]..sort();
+      final id=indices.join(',');
+      if(!signatures.add(id))continue;
+      batches.add([for(final index in indices)chronological[index]]);
+    }
+    return batches;
+  }
+
   static const maxVerifications=5;
   static const maxSearch=Duration(minutes:3);
   static const perCandidateLimit=Duration(seconds:95);
