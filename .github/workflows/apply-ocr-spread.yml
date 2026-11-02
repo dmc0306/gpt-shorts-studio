@@ -1,0 +1,24 @@
+name: Apply distributed OCR scenes
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/apply-ocr-spread.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: true}
+      - name: Integrate distributed OCR scene positions
+        run: python3 tool/patch_ocr_spread.py
+      - name: Commit source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add shorts-studio-source.zip
+          git diff --cached --quiet && { echo "No changes"; exit 1; }
+          git commit -m "Spread OCR-clean matching frames across the full benchmark video"
+          git push
