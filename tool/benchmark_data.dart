@@ -82,21 +82,63 @@ class BenchState {
     'diagnostics':diagnostics};
   factory BenchState.fromJson(Map raw){
     final b=BenchState();
-    if(raw['channels'] is Map){b.channels.clear();(raw['channels'] as Map).forEach((k,v){if(k is String&&v is String&&RegExp(r'^UC[\w-]{22}$').hasMatch(k))b.channels[k]=v;});}
-    if(raw['top'] is Map){(raw['top'] as Map).forEach((k,v){if(k is String&&v is List)b.top[k]=v.whereType<Map>().map(BenchVideo.fromJson).toList();});}
-    if(raw['scanned'] is Map){(raw['scanned'] as Map).forEach((k,v){if(k is String&&v is num)b.scanned[k]=v.toInt();});}
-    if(raw['complete'] is Map){(raw['complete'] as Map).forEach((k,v){if(k is String&&v is bool)b.complete[k]=v;});}
+    if(raw['channels'] is Map){
+      b.channels.clear();
+      (raw['channels'] as Map).forEach((k,v){
+        if(k is String&&v is String&&RegExp(r'^UC[\\w-]{22}$').hasMatch(k)){
+          b.channels[k]=v;
+        }
+      });
+    }
+    if(raw['top'] is Map){
+      (raw['top'] as Map).forEach((k,v){
+        if(k is String&&v is List){
+          b.top[k]=v.whereType<Map>().map(BenchVideo.fromJson).toList();
+        }
+      });
+    }
+    if(raw['scanned'] is Map){
+      (raw['scanned'] as Map).forEach((k,v){
+        if(k is String&&v is num)b.scanned[k]=v.toInt();
+      });
+    }
+    if(raw['complete'] is Map){
+      (raw['complete'] as Map).forEach((k,v){
+        if(k is String&&v is bool)b.complete[k]=v;
+      });
+    }
     b.seen.addAll((raw['seen'] as List? ?? []).whereType<String>());
     b.selected.addAll((raw['selected'] as List? ?? []).whereType<String>());
-    if(raw['origins'] is Map){(raw['origins'] as Map).forEach((k,v){if(k is String&&v is List)b.origins[k]=v.whereType<Map>().map(BenchOrigin.fromJson).toList();});}
-    for(final pair in [(raw['chosen'],b.chosen),(raw['rights'],b.rights),(raw['proof'],b.proof)]){
+    if(raw['origins'] is Map){
+      (raw['origins'] as Map).forEach((k,v){
+        if(k is String&&v is List){
+          b.origins[k]=v.whereType<Map>().map(BenchOrigin.fromJson).toList();
+        }
+      });
+    }
+    for(final pair in [(raw['chosen'],b.chosen),(raw['rights'],b.rights),
+                       (raw['proof'],b.proof)]){
       final source=pair.$1,target=pair.$2;
-      if(source is Map)source.forEach((k,v){if(k is String&&v is String)target[k]=v;});
+      if(source is Map){
+        source.forEach((k,v){if(k is String&&v is String)target[k]=v;});
+      }
     }
     if(raw['confirmed'] is Map){
       (raw['confirmed'] as Map).forEach((k,v){
-        if(k is String&&v is String&&
-            RegExp(r'^[A-Za-z0-9_-]{11}
+        if(k is String&&v is String&&RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(k)){
+          final safe=normalOrigin(v);
+          if(safe!=null)b.confirmed[k]=safe;
+        }
+      });
+    }
+    if(raw['rejected'] is Map){
+      (raw['rejected'] as Map).forEach((k,v){
+        if(k is! String||v is! List)return;
+        final valid=v.whereType<String>().map(normalOrigin).whereType<String>().toSet();
+        if(valid.isNotEmpty)b.rejected[k]=valid;
+      });
+    }
+    if(raw['diagnostics'] is Map){
       (raw['diagnostics'] as Map).forEach((k,v){
         if(k is String&&v is String)b.diagnostics[k]=v;
       });
