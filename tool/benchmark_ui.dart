@@ -125,7 +125,8 @@ class _BenchmarkState extends State<BenchmarkScreen>{
     report('한국어 OCR로 글자 영역을 제외한 검색 장면 ${previews.length}장 확보 · 동일/유사 길이 (±20%, 최소 ±3초) 후보만 자동 확인');
     final key=visionKeyText.text.trim().isNotEmpty?visionKeyText.text.trim():keyText.text.trim();
     final explorer=OneClickExplorer(key,(message)=>report(message),
-      youtubeApiKey:keyText.text.trim(),benchmarkSeconds:v.duration);
+      youtubeApiKey:keyText.text.trim(),benchmarkSeconds:v.duration,
+      ignoredUrls:state.rejected[v.id]??const <String>{});
     activeExplorer=explorer;
     final result=await explorer.run(v.id,frames);
     state.diagnostics[v.id]=result.diagnostic;
@@ -137,11 +138,13 @@ class _BenchmarkState extends State<BenchmarkScreen>{
         'overlay'=>'제외 · 기존 자막 의심',
         'unrelated'=>'제외 · 실제 영상 불일치',
         'duration'=>'제외 · 영상 길이 불일치 또는 확인 불가',
+        'weak'=>'단순 관련 페이지 · 자동 검증 대상 아님',
         'unsupported'=>'확인 필요 · 플랫폼 미지원',
         'error'=>'확인 실패',_=>'확인 필요'
       };
-      visible.add(BenchOrigin(item.origin.url,'$prefix · ${item.detail}',item.status=='checked'?
-        '실제 동영상 교차확인':'검증되지 않은 검색 후보'));
+      visible.add(BenchOrigin(item.origin.url,'$prefix · ${item.detail}',
+        item.status=='checked'?'실제 동영상 교차확인':
+        item.status=='weak'?'연관 페이지만 확인':'검증되지 않은 검색 후보'));
     }
     // Preserve user-supplied original links across future image searches.
     final manual=(state.origins[v.id]??<BenchOrigin>[])
@@ -267,12 +270,13 @@ class _BenchmarkState extends State<BenchmarkScreen>{
  }
  Widget candidateCard(BenchVideo v){
    final userOriginal=state.confirmed[v.id];
+   final dismissed=state.rejected[v.id]??const <String>{};
    final other=state.origins[v.id]??<BenchOrigin>[];
    final list=<BenchOrigin>[
      if(userOriginal!=null)BenchOrigin(userOriginal,
        '사용자가 원본이라고 제공한 링크 · 자동 이미지 검색의 발견 성과로 계산하지 않음',
        '사용자 제공 원본'),
-     ...other.where((x)=>x.url!=userOriginal)
+     ...other.where((x)=>x.url!=userOriginal&&!dismissed.contains(x.url))
    ];
    final selected=state.chosen[v.id];
    final canCreate=selected!=null&&!busy;
@@ -322,6 +326,15 @@ class _BenchmarkState extends State<BenchmarkScreen>{
        Padding(padding:const EdgeInsets.symmetric(vertical:8),
          child:SelectableText('마지막 원본 탐색 진단: ${state.diagnostics[v.id]}',
             style:const TextStyle(fontSize:12))),
+     if(dismissed.isNotEmpty)Align(alignment:Alignment.centerLeft,
+       child:TextButton.icon(
+         onPressed:busy?null:()async{
+           setState(()=>state.rejected.remove(v.id));
+           await save();
+           report('이 영상에서 제외했던 후보 ${dismissed.length}건을 다시 표시할 수 있어요.');
+         },
+         icon:const Icon(Icons.undo,size:16),
+         label:Text('원본 아님으로 제외한 ${dismissed.length}건 초기화'))),
      if(list.isEmpty&&!busy)const Text('원본 후보 없음 · 위 진단을 확인하세요. 웹 이미지 색인에 영상 원본이 없을 수도 있습니다.',
        style:TextStyle(fontSize:12)),
      for(final x in list)Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
@@ -329,12 +342,49 @@ class _BenchmarkState extends State<BenchmarkScreen>{
       title:Text('${x.source}: ${x.url}',maxLines:2,overflow:TextOverflow.ellipsis),
       subtitle:Text(x.evidence,style:const TextStyle(fontSize:12)),
       value:x.url,groupValue:selected,
-      onChanged:busy||x.source=='검증되지 않은 검색 후보'?null:(u){setState(()=>state.chosen[v.id]=u!);save();}),
+      onChanged:busy||x.source=='검증되지 않은 검색 후보'||
+          x.source=='연관 페이지만 확인'?null:(u){
+        setState(()=>state.chosen[v.id]=u!);save();}),
      Padding(padding:const EdgeInsets.only(left:32,bottom:8),
        child:Align(alignment:Alignment.centerLeft,
          child:TextButton.icon(onPressed:()=>open(x.url),
            icon:const Icon(Icons.open_in_new,size:17),
-           label:const Text('후보 게시물 열어보기')))), ]),
+           label:const Text('후보 게시물 열어보기')))),
+       if(x.source!='사용자 제공 원본')
+         Wrap(spacing:6,children:[
+           TextButton.icon(onPressed:busy?null:()async{
+             setState((){
+               state.rejected.putIfAbsent(v.id,()=> <String>{}).add(x.url);
+               state.origins[v.id]?.removeWhere((o)=>o.url==x.url);
+               if(state.chosen[v.id]==x.url)state.chosen.remove(v.id);
+             });
+             await save();
+             report('원본 아님으로 제외했어요. 다음 검색에서 이 링크는 건너뜁니다.');
+           },icon:const Icon(Icons.block,size:16),
+             label:const Text('원본 아님')),
+           TextButton.icon(onPressed:busy?null:()async{
+             final confirmed=await showDialog<bool>(context:context,
+               builder:(ctx)=>AlertDialog(
+                 title:const Text('이 게시물을 원본으로 확인했나요?'),
+                 content:Text('이 링크를 사용자 확인 원본으로 저장합니다. '
+                     '자동 검색이 찾은 원본이라고 계산하지 않아요.\\n\\n${x.url}'),
+                 actions:[
+                   TextButton(onPressed:()=>Navigator.pop(ctx,false),
+                     child:const Text('취소')),
+                   FilledButton(onPressed:()=>Navigator.pop(ctx,true),
+                     child:const Text('원본으로 저장')),
+                 ]));
+             if(confirmed!=true||!mounted)return;
+             setState((){
+               state.confirmed[v.id]=x.url;
+               state.chosen[v.id]=x.url;
+               state.rejected[v.id]?.remove(x.url);
+             });
+             await save();
+             report('사용자가 확인한 원본으로 보존했어요. 다음 검색으로 삭제되지 않아요.');
+           },icon:const Icon(Icons.bookmark_add_outlined,size:16),
+             label:const Text('원본 확인·저장')),
+         ]), ]),
      if(selected!=null)TextButton.icon(onPressed:()=>open(selected),
       icon:const Icon(Icons.open_in_new),label:const Text('선택한 원본 확인')),
      const SizedBox(height:8),
