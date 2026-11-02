@@ -322,7 +322,8 @@ class OneClickExplorer {
         diagnostic:discovery.diagnostic);
     }
     report('2/3 · YouTube 후보의 실제 재생시간 조회 및 유사 길이 우선 정렬 중');
-    final allIds=discovered.map((o)=>youtubeId(o.url)).whereType<String>();
+    final allIds=discovered.where((o)=>o.source!='연관 페이지만 확인')
+      .map((o)=>youtubeId(o.url)).whereType<String>();
     final lengths=await BenchmarkDuration.youtubeLengths(youtubeApiKey,allIds);
     _check();
     int priority(BenchOrigin item){
@@ -417,7 +418,10 @@ class OneClickExplorer {
     final overlay=results.where((r)=>r.status=='overlay').length;
     final failures=results.where((r)=>r.status=='error').length;
     final durationSkipped=results.where((r)=>r.status=='duration').length;
-    final diagnostic='${discovery.diagnostic} 실제 영상 검사 $checked건 · '
+    final directLeads=discovered.where((o)=>o.source=='이미지 직접일치 후보').length;
+    final weakLeads=discovered.where((o)=>o.source=='연관 페이지만 확인').length;
+    final diagnostic='${discovery.diagnostic} 직접 이미지 일치 후보 $directLeads건 · '
+      '단순 관련 페이지 $weakLeads건(자동 확인 제외) · 실제 영상 검사 $checked건 · '
       '장면·자막 검증 통과 $verified건 · 불일치 $rejected건 · '
       '자막 의심 $overlay건 · 길이 불일치/미확인 $durationSkipped건 · 처리 실패 $failures건.';
     report(diagnostic);
