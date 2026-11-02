@@ -1,0 +1,39 @@
+name: Validate original-video temporal precision
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tool/benchmark_oneclick.dart'
+      - 'tool/BenchmarkFrameExtractor.kt'
+      - 'tool/benchmark_tests.dart'
+      - 'tool/patch_temporal_precision.py'
+      - '.github/workflows/validate-temporal-precision.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply source patch to disposable copy
+        run: |
+          python3 tool/patch_temporal_precision.py
+          unzip -q shorts-studio-source.zip -d app
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Bootstrap dependencies
+        working-directory: app
+        run: python3 tool/bootstrap.py
+      - name: Flutter static analysis
+        working-directory: app
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Flutter regression tests
+        working-directory: app
+        run: flutter test
