@@ -57,6 +57,10 @@ class OneClickResult {
     for(final r in results){if(r.status=='checked'&&r.clip!=null)return r;}
     return null;
   }
+  CandidateCheck? get match {
+    for(final r in results){if(r.status=='checked')return r;}
+    return null;
+  }
 }
 
 /// Each reference frame may correlate with a different original clip in a
@@ -290,13 +294,19 @@ class OneClickExplorer {
       final actualMs=frames.isNotEmpty&&frames.first is Map
         ?(frames.first as Map)['durationMs'] as num?:null;
       final actualSec=actualMs==null?null:(actualMs.toDouble()/1000).round();
-      if(benchmarkSeconds>0){
-        if(actualSec==null)return CandidateCheck(origin,'duration',
-          '실제 영상 길이 확인 불가 · 자동 판정 보류');
-        if(!BenchmarkDuration.similar(benchmarkSeconds,actualSec)){
-          return CandidateCheck(origin,'duration',
-            BenchmarkDuration.label(benchmarkSeconds,actualSec));
-        }
+      if(actualSec==null){
+        return CandidateCheck(origin,'duration','실제 영상 길이 확인 불가 · 자동 판정 보류');
+      }
+      final info=frames.isNotEmpty&&frames.first is Map?frames.first as Map:null;
+      final width=(info?['videoWidth'] as num?)?.toInt();
+      final height=(info?['videoHeight'] as num?)?.toInt();
+      if(!BenchmarkDuration.isShortGeometry(actualSec,width,height)){
+        return CandidateCheck(origin,'longform',
+          '롱폼/가로 영상 제외 · ${actualSec}초 · 해상도 ${width??'?'}×${height??'?'} · 세로형 또는 정사각형 최대 180초만 허용');
+      }
+      if(benchmarkSeconds>0&&!BenchmarkDuration.similar(benchmarkSeconds,actualSec)){
+        return CandidateCheck(origin,'duration',
+          BenchmarkDuration.label(benchmarkSeconds,actualSec));
       }
       final match=VideoMatch.match(reference,frames);
       if(!VideoMatch.strong(match)){
@@ -385,14 +395,19 @@ class OneClickExplorer {
       }
       final candidateYoutubeId=youtubeId(origin.url);
       if(candidateYoutubeId==null&&tiktokUrl(origin.url)==null)continue;
-      if(candidateYoutubeId!=null&&benchmarkSeconds>0){
+      if(candidateYoutubeId!=null){
         final duration=lengths[candidateYoutubeId];
+        if(duration!=null&&!BenchmarkDuration.isShort(duration)){
+          results.add(CandidateCheck(origin,'longform',
+            'YouTube 롱폼 제외 · ${duration}초 · 최대 180초만 검사'));
+          continue;
+        }
         if(duration==null){
           results.add(CandidateCheck(origin,'duration',
             'YouTube 공식 API로 후보 길이를 확인하지 못해 다운로드하지 않았어요. YouTube Data API 키 설정을 확인해 주세요.'));
           continue;
         }
-        if(!BenchmarkDuration.similar(benchmarkSeconds,duration)){
+        if(benchmarkSeconds>0&&!BenchmarkDuration.similar(benchmarkSeconds,duration)){
           results.add(CandidateCheck(origin,'duration',
             BenchmarkDuration.label(benchmarkSeconds,duration)+' · 자동 확인에서 제외'));
           continue;
@@ -438,8 +453,8 @@ class OneClickExplorer {
     report('3/3 · 실제 영상 대조 결과 정리 중');
     results.sort((a,b){
       int weight(String s)=>switch(s){
-        'checked'=>0,'overlay'=>1,'duration'=>2,'unverified'=>3,
-        'weak'=>6,'unsupported'=>4,_=>5};
+        'checked'=>0,'overlay'=>1,'duration'=>2,'longform'=>3,'unverified'=>4,
+        'weak'=>7,'unsupported'=>5,_=>6};
       return weight(a.status).compareTo(weight(b.status));
     });
     final verified=results.where((r)=>r.status=='checked').length;
@@ -447,12 +462,13 @@ class OneClickExplorer {
     final overlay=results.where((r)=>r.status=='overlay').length;
     final failures=results.where((r)=>r.status=='error').length;
     final durationSkipped=results.where((r)=>r.status=='duration').length;
+    final longformSkipped=results.where((r)=>r.status=='longform').length;
     final directLeads=discovered.where((o)=>o.source=='이미지 직접일치 후보').length;
     final weakLeads=discovered.where((o)=>o.source=='연관 페이지만 확인').length;
     final diagnostic='${discovery.diagnostic} 직접 이미지 일치 후보 $directLeads건 · '
       '단순 관련 페이지 $weakLeads건(자동 확인 제외) · 실제 영상 검사 $checked건 · '
       '장면·자막 검증 통과 $verified건 · 불일치 $rejected건 · '
-      '자막 의심 $overlay건 · 길이 불일치/미확인 $durationSkipped건 · 처리 실패 $failures건.';
+      '자막 의심 $overlay건 · 길이 불일치/미확인 $durationSkipped건 · 롱폼/가로 영상 제외 $longformSkipped건 · 처리 실패 $failures건.';
     report(diagnostic);
     return OneClickResult(results,total:discovered.length,inspected:checked,
       diagnostic:diagnostic);
