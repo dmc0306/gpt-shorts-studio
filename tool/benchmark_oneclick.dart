@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'benchmark_data.dart';
+import 'benchmark_duration.dart';
 import 'benchmark_stream.dart';
 import 'bridge.dart';
 import 'model.dart';
@@ -169,8 +170,10 @@ class CandidateThumbnail {
 }
 
 class OneClickExplorer {
-  OneClickExplorer(this.apiKey,this.report);
+  OneClickExplorer(this.apiKey,this.report,{this.youtubeApiKey='',this.benchmarkSeconds=0});
   final String apiKey;
+  final String youtubeApiKey;
+  final int benchmarkSeconds;
   final void Function(String message) report;
   static const maxVerifications=5;
   static const maxSearch=Duration(minutes:3);
@@ -198,7 +201,7 @@ class OneClickExplorer {
     return id!=null&&RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(id)?id:null;
   }
 
-  Future<CandidateCheck> inspect(BenchOrigin origin,List<dynamic> reference)async{
+  Future<CandidateCheck> inspect(BenchOrigin origin,List<dynamic> reference,{int? expectedLength})async{
     _check();
     String? path;
     Clip? downloaded;
@@ -221,8 +224,11 @@ class OneClickExplorer {
         final d=TikTokDownloader();
         _activeTikTok=d;
         try{
+          final delta=BenchmarkDuration.tolerance(benchmarkSeconds);
+          final minSec=benchmarkSeconds>0?(benchmarkSeconds-delta).clamp(5,600).toDouble():5.0;
+          final maxSec=benchmarkSeconds>0?(benchmarkSeconds+delta).clamp(5,600).toDouble():60.0;
           downloaded=Clip.fromJson(await d.download(origin.url,
-            (value,message)=>report(message),minDuration:5,maxDuration:60));
+            (value,message)=>report(message),minDuration:minSec,maxDuration:maxSec));
         }finally{d.cancel();_activeTikTok=null;}
         _check();
         path=downloaded.path;
@@ -231,11 +237,32 @@ class OneClickExplorer {
       }
       if(path==null||path.isEmpty)throw StateError('검증할 영상 파일이 없어요.');
       _check();
-      final raw=await Native.call<Map<dynamic,dynamic>>('benchmarkInspectCandidate',{'path':path})
+      final bounds=<Map<String,double>>[];
+      for(final item in reference){
+        if(item is Map && item['bounds'] is Map){
+          final b=item['bounds'] as Map;
+          if(['x','y','w','h'].every((k)=>b[k] is num)){
+            bounds.add({for(final k in ['x','y','w','h'])k:(b[k] as num).toDouble()});
+          }
+        }
+      }
+      final raw=await Native.call<Map<dynamic,dynamic>>('benchmarkInspectCandidate',
+        {'path':path,'bounds':bounds})
         .timeout(const Duration(seconds:75));
       _check();
       if(raw==null)throw StateError('영상 프레임 검사 결과 없음');
       final frames=raw['frames'] as List? ?? [];
+      final actualMs=frames.isNotEmpty&&frames.first is Map
+        ?(frames.first as Map)['durationMs'] as num?:null;
+      final actualSec=actualMs==null?null:(actualMs.toDouble()/1000).round();
+      if(benchmarkSeconds>0){
+        if(actualSec==null)return CandidateCheck(origin,'duration',
+          '실제 영상 길이 확인 불가 · 자동 판정 보류');
+        if(!BenchmarkDuration.similar(benchmarkSeconds,actualSec)){
+          return CandidateCheck(origin,'duration',
+            BenchmarkDuration.label(benchmarkSeconds,actualSec));
+        }
+      }
       final match=VideoMatch.match(reference,frames);
       if(!VideoMatch.strong(match)){
         return CandidateCheck(origin,'unrelated',
