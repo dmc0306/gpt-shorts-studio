@@ -1,0 +1,20 @@
+name: Inspect current on-device OCR APIs
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/inspect-frame-ocr.yml']
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract exact OCR implementation
+        run: |
+          python3 - <<'PY'
+          from zipfile import ZipFile
+          z=ZipFile('shorts-studio-source.zip')
+          for name in ['native/android/OriginalTextScanner.kt','native/android/dependencies.gradle.kts','lib/benchmark_stream.dart','lib/tiktok_download.dart']:
+            print('===== FILE',name)
+            print(z.read(name).decode()[:28000])
+          PY
