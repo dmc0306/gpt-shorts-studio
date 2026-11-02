@@ -242,4 +242,28 @@ void main(){
    expect(VideoMatch.strong(m),false);
  });
 
+ test('User-known Shorts to TikTok source pair is preserved independent of image search',(){
+   const id='NPom9sHH2J0';
+   const userLink='https://vt.tiktok.com/ZSp11jbJd/';
+   expect(benchmarkGroundTruth[id],userLink);
+   final state=BenchState();
+   expect(state.confirmed[id],userLink);
+   state.origins[id]=[const BenchOrigin('https://www.youtube.com/watch?v=AAAAAAAAAAA',
+       '역검색에서 발견한 관련 페이지','역이미지 탐색 후보')];
+   final restored=BenchState.fromJson(state.toJson());
+   expect(restored.confirmed[id],userLink);
+   expect(restored.origins[id]!.single.source,'역이미지 탐색 후보');
+ });
+ test('TikTok vt and vm short links are accepted without allowing other hosts',(){
+   expect(normalOrigin('https://vt.tiktok.com/ZSp11jbJd/'),
+     'https://vt.tiktok.com/ZSp11jbJd/');
+   expect(normalOrigin('https://vt.tiktok.com/ZSp11jbJd/?share=abc'),
+     'https://vt.tiktok.com/ZSp11jbJd/');
+   expect(normalOrigin('https://vm.tiktok.com/Ab1CdE2/'),
+     'https://vm.tiktok.com/Ab1CdE2/');
+   expect(normalOrigin('https://vt.tiktok.com.evil.example/ZSp11jbJd/'),isNull);
+   expect(normalOrigin('http://vt.tiktok.com/ZSp11jbJd/'),isNull);
+   expect(normalOrigin('https://vt.tiktok.com/'),isNull);
+ });
+
 }
