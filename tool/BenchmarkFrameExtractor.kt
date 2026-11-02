@@ -54,12 +54,12 @@ object BenchmarkFrameExtractor {
             for(i in 0 until 16) {
                 val ms=(duration*(i+0.5)/16).toLong().coerceIn(0,duration-1)
                 val frame=media.getScaledFrameAtTime(ms*1000L,
-                    MediaMetadataRetriever.OPTION_CLOSEST_SYNC,480,480)?:continue
+                    MediaMetadataRetriever.OPTION_CLOSEST,480,480)?:continue
                 try {
                     val windows=if(bounds.isEmpty())listOf(
                       mapOf("x" to 0.07,"y" to 0.30,"w" to 0.86,"h" to 0.35))
                       else bounds.take(8)
-                    for(window in windows){
+                    for((cropIndex,window) in windows.withIndex()){
                       val x=((window["x"]?:0.07)*frame.width).toInt().coerceIn(0,frame.width-2)
                       val y=((window["y"]?:0.30)*frame.height).toInt().coerceIn(0,frame.height-2)
                       val w=((window["w"]?:0.86)*frame.width).toInt().coerceIn(2,frame.width-x)
@@ -68,7 +68,7 @@ object BenchmarkFrameExtractor {
                       try{
                         val info=perceptualHash(clean)
                         result.add(mapOf("hash" to info.first,"contrast" to info.second,
-                            "timeMs" to ms,"durationMs" to duration))
+                            "timeMs" to ms,"durationMs" to duration,"cropIndex" to cropIndex))
                       }finally{clean.recycle()}
                     }
                 } finally {frame.recycle()}
@@ -141,7 +141,7 @@ object BenchmarkFrameExtractor {
                 if(scenes.size>=6)break
                 val ms=(duration*(index+.5)/12).toLong().coerceIn(0,duration-1)
                 val frame=media.getScaledFrameAtTime(ms*1000,
-                    MediaMetadataRetriever.OPTION_CLOSEST_SYNC,720,960)?:continue
+                    MediaMetadataRetriever.OPTION_CLOSEST,720,960)?:continue
                 try{
                     val region=BenchmarkOcrCrop.select(frame,recognizer)?:continue
                     val clean=Bitmap.createBitmap(frame,region.x,region.y,region.w,region.h)
