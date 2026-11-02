@@ -142,17 +142,19 @@ void main(){
  });
  test('Visual verification requires distinct matching reference and candidate scenes',(){
    final reference=[
-     {'hash':'aaaaaaaaaaaaaaaa','contrast':38},
-     {'hash':'5555555555555555','contrast':52},
+     {'hash':'aaaaaaaaaaaaaaaa','contrast':38,'timeMs':1000},
+     {'hash':'5555555555555555','contrast':52,'timeMs':3000},
+     {'hash':'f0f0f0f0f0f0f0f0','contrast':48,'timeMs':5000},
    ];
    final candidate=[
-     {'hash':'aaaaaaaaaaaaaaaa','contrast':38},
-     {'hash':'5555555555555555','contrast':52},
-     {'hash':'0000000000000000','contrast':53},
+     {'hash':'aaaaaaaaaaaaaaaa','contrast':38,'timeMs':1200},
+     {'hash':'5555555555555555','contrast':52,'timeMs':3200},
+     {'hash':'f0f0f0f0f0f0f0f0','contrast':48,'timeMs':5200},
+     {'hash':'0000000000000000','contrast':53,'timeMs':6200},
    ];
    final verified=VideoMatch.match(reference,candidate);
-   expect(verified.matched,2);
-   expect(verified.distinctCandidate,2);
+   expect(verified.matched,3);
+   expect(verified.distinctCandidate,3);
    expect(verified.best,0);
    expect(VideoMatch.strong(verified),true);
    final single=VideoMatch.match(reference,[candidate.first]);
@@ -238,7 +240,7 @@ void main(){
      {'hash':'5555555555555555','contrast':44,'timeMs':2000},
    ];
    final m=VideoMatch.match(reference,sameFrame);
-   expect(m.matched,2);
+   expect(m.matched,1);
    expect(m.distinctCandidate,1);
    expect(VideoMatch.strong(m),false);
  });
@@ -298,6 +300,55 @@ void main(){
    ],'AbcDefGhI12');
    expect(list.length,3);
    expect(list.every((e)=>e.source=='연관 페이지만 확인'),true);
+ });
+ test('Two coincidentally similar frames cannot auto-approve a source',(){
+   final ref=[
+     {'hash':'aaaaaaaaaaaaaaaa','contrast':40,'timeMs':1000},
+     {'hash':'5555555555555555','contrast':40,'timeMs':3000},
+   ];
+   final candidates=[
+     {'hash':'aaaaaaaaaaaaaaaa','contrast':40,'timeMs':1000},
+     {'hash':'5555555555555555','contrast':40,'timeMs':3000},
+   ];
+   final m=VideoMatch.match(ref,candidates);
+   expect(m.matched,2);
+   expect(VideoMatch.strong(m),false);
+ });
+ test('Reverse timeline cannot masquerade as the source video',(){
+   final ref=[
+     {'hash':'aaaaaaaaaaaaaaaa','contrast':40,'timeMs':1000},
+     {'hash':'5555555555555555','contrast':40,'timeMs':3000},
+     {'hash':'f0f0f0f0f0f0f0f0','contrast':40,'timeMs':5000},
+   ];
+   final reversed=[
+     {'hash':'f0f0f0f0f0f0f0f0','contrast':40,'timeMs':1000},
+     {'hash':'5555555555555555','contrast':40,'timeMs':3000},
+     {'hash':'aaaaaaaaaaaaaaaa','contrast':40,'timeMs':5000},
+   ];
+   final m=VideoMatch.match(ref,reversed);
+   expect(VideoMatch.strong(m),false);
+   expect(m.matched,lessThan(3));
+ });
+ test('Same hash across different OCR crops is not source evidence',(){
+   final ref=[
+     {'hash':'aaaaaaaaaaaaaaaa','contrast':42,'timeMs':1000},
+     {'hash':'5555555555555555','contrast':42,'timeMs':3000},
+     {'hash':'f0f0f0f0f0f0f0f0','contrast':42,'timeMs':5000},
+   ];
+   final wrongCrops=[
+     {'hash':'aaaaaaaaaaaaaaaa','contrast':42,'timeMs':1200,'cropIndex':2},
+     {'hash':'5555555555555555','contrast':42,'timeMs':3200,'cropIndex':0},
+     {'hash':'f0f0f0f0f0f0f0f0','contrast':42,'timeMs':5200,'cropIndex':1},
+   ];
+   expect(VideoMatch.strong(VideoMatch.match(ref,wrongCrops)),false);
+ });
+ test('Repeated middle-of-frame captions are excluded, not only top and bottom',(){
+   final overlay=<String,dynamic>{'lines':[
+     for(final second in [1,2,3,4])
+       {'x':.15,'y':.48,'w':.54,'letters':8,
+        'time':second,'watermark':false}
+   ]};
+   expect(OverlayCheck.suspicious(overlay),true);
  });
  test('Rejected links persist per benchmark and can be cleared',(){
    final state=BenchState();
