@@ -122,8 +122,10 @@ class _BenchmarkState extends State<BenchmarkScreen>{
       framePreviews[v.id]=previews;
       fullFramePreviews[v.id]=uncropped;
     });
+    report('한국어 OCR로 글자 영역을 제외한 검색 장면 ${previews.length}장 확보 · 동일/유사 길이 (±20%, 최소 ±3초) 후보만 자동 확인');
     final key=visionKeyText.text.trim().isNotEmpty?visionKeyText.text.trim():keyText.text.trim();
-    final explorer=OneClickExplorer(key,(message)=>report(message));
+    final explorer=OneClickExplorer(key,(message)=>report(message),
+      youtubeApiKey:keyText.text.trim(),benchmarkSeconds:v.duration);
     activeExplorer=explorer;
     final result=await explorer.run(v.id,frames);
     state.diagnostics[v.id]=result.diagnostic;
@@ -134,6 +136,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
         'checked'=>'검증됨 · 자막 의심 미검출',
         'overlay'=>'제외 · 기존 자막 의심',
         'unrelated'=>'제외 · 실제 영상 불일치',
+        'duration'=>'제외 · 영상 길이 불일치 또는 확인 불가',
         'unsupported'=>'확인 필요 · 플랫폼 미지원',
         'error'=>'확인 실패',_=>'확인 필요'
       };
@@ -279,7 +282,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
          label:Text(cancelled?'중단 처리 중':'검색 중단'))),
      ],
      if(framePreviews[v.id]?.isNotEmpty==true)...[
-       const Text('Cloud Vision 검색 장면 · 사진을 누르면 전체 프레임을 다른 역이미지 검색 앱으로 공유',style:TextStyle(fontSize:12,fontWeight:FontWeight.bold)),
+       const Text('OCR로 자막 위치를 피해서 추출한 장면 · 사진을 누르면 전체 프레임을 이미지 검색 앱으로 공유',style:TextStyle(fontSize:12,fontWeight:FontWeight.bold)),
        const SizedBox(height:6),
        SizedBox(height:124,child:ListView.separated(
          scrollDirection:Axis.horizontal,
