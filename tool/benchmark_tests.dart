@@ -312,6 +312,7 @@ void main(){
    ];
    final m=VideoMatch.match(ref,candidates);
    expect(m.matched,2);
+   expect(VideoMatch.plausible(m),true);
    expect(VideoMatch.strong(m),false);
  });
  test('Reverse timeline cannot masquerade as the source video',(){
