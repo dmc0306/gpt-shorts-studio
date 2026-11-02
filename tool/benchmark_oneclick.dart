@@ -315,10 +315,24 @@ class OneClickExplorer {
       return OneClickResult(const [],total:0,inspected:0,
         diagnostic:discovery.diagnostic);
     }
+    report('2/3 · YouTube 후보의 실제 재생시간 조회 및 유사 길이 우선 정렬 중');
+    final allIds=discovered.map((o)=>youtubeId(o.url)).whereType<String>();
+    final lengths=await BenchmarkDuration.youtubeLengths(youtubeApiKey,allIds);
+    _check();
+    int priority(BenchOrigin item){
+      final id=youtubeId(item.url);
+      if(id!=null){
+        final duration=lengths[id];
+        if(duration==null)return 3;
+        return BenchmarkDuration.similar(benchmarkSeconds,duration)?0:4;
+      }
+      return tiktokUrl(item.url)!=null?1:2;
+    }
+    final ordered=discovered.toList()..sort((a,b)=>priority(a).compareTo(priority(b)));
     final results=<CandidateCheck>[];
     var checked=0;
     var youtubeStreamBlocked=false;
-    for(final origin in discovered){
+    for(final origin in ordered){
       _check();
       if(checked>=maxVerifications||watch.elapsed>=maxSearch){
         report('검증 제한에 도달했어요. 나머지는 확인되지 않은 후보로 남겨요.');
@@ -326,6 +340,20 @@ class OneClickExplorer {
       }
       final candidateYoutubeId=youtubeId(origin.url);
       if(candidateYoutubeId==null&&tiktokUrl(origin.url)==null)continue;
+      if(candidateYoutubeId!=null&&benchmarkSeconds>0){
+        final duration=lengths[candidateYoutubeId];
+        if(duration==null){
+          results.add(CandidateCheck(origin,'duration',
+            'YouTube 공식 API로 후보 길이를 확인하지 못해 다운로드하지 않았어요. YouTube Data API 키 설정을 확인해 주세요.'));
+          continue;
+        }
+        if(!BenchmarkDuration.similar(benchmarkSeconds,duration)){
+          results.add(CandidateCheck(origin,'duration',
+            BenchmarkDuration.label(benchmarkSeconds,duration)+' · 자동 확인에서 제외'));
+          continue;
+        }
+        report('후보 길이 조건 통과 · ${BenchmarkDuration.label(benchmarkSeconds,duration)}');
+      }
       if(candidateYoutubeId!=null&&youtubeStreamBlocked){
         report('YouTube 스트림 문제로 동일 플랫폼의 반복 다운로드 생략');
         final imageHint=await CandidateThumbnail.check(candidateYoutubeId,frames);
@@ -364,16 +392,17 @@ class OneClickExplorer {
     _check();
     report('3/3 · 실제 영상 대조 결과 정리 중');
     results.sort((a,b){
-      int weight(String s)=>switch(s){'checked'=>0,'overlay'=>1,'unverified'=>2,'unsupported'=>3,_=>4};
+      int weight(String s)=>switch(s){'checked'=>0,'overlay'=>1,'duration'=>2,'unverified'=>3,'unsupported'=>4,_=>5};
       return weight(a.status).compareTo(weight(b.status));
     });
     final verified=results.where((r)=>r.status=='checked').length;
     final rejected=results.where((r)=>r.status=='unrelated').length;
     final overlay=results.where((r)=>r.status=='overlay').length;
     final failures=results.where((r)=>r.status=='error').length;
+    final durationSkipped=results.where((r)=>r.status=='duration').length;
     final diagnostic='${discovery.diagnostic} 실제 영상 검사 $checked건 · '
       '장면·자막 검증 통과 $verified건 · 불일치 $rejected건 · '
-      '자막 의심 $overlay건 · 처리 실패 $failures건.';
+      '자막 의심 $overlay건 · 길이 불일치/미확인 $durationSkipped건 · 처리 실패 $failures건.';
     report(diagnostic);
     return OneClickResult(results,total:discovered.length,inspected:checked,
       diagnostic:diagnostic);
