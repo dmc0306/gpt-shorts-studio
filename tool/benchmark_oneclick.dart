@@ -173,10 +173,12 @@ class CandidateThumbnail {
 }
 
 class OneClickExplorer {
-  OneClickExplorer(this.apiKey,this.report,{this.youtubeApiKey='',this.benchmarkSeconds=0});
+  OneClickExplorer(this.apiKey,this.report,{
+    this.youtubeApiKey='',this.benchmarkSeconds=0,this.ignoredUrls=const {}});
   final String apiKey;
   final String youtubeApiKey;
   final int benchmarkSeconds;
+  final Set<String> ignoredUrls;
   final void Function(String message) report;
   static const maxVerifications=5;
   static const maxSearch=Duration(minutes:3);
@@ -313,7 +315,8 @@ class OneClickExplorer {
     }
     finally{finder.close();}
     report(discovery.diagnostic);
-    final discovered=discovery.candidates;
+    final discovered=discovery.candidates.where((c)=>
+      !ignoredUrls.contains(c.url)).toList();
     if(discovered.isEmpty){
       return OneClickResult(const [],total:0,inspected:0,
         diagnostic:discovery.diagnostic);
@@ -323,6 +326,9 @@ class OneClickExplorer {
     final lengths=await BenchmarkDuration.youtubeLengths(youtubeApiKey,allIds);
     _check();
     int priority(BenchOrigin item){
+      // A social page alone is not enough evidence to spend a video-download
+      // verification slot; show it separately as an optional manual lead.
+      if(item.source=='연관 페이지만 확인')return 5;
       final id=youtubeId(item.url);
       if(id!=null){
         final duration=lengths[id];
@@ -340,6 +346,12 @@ class OneClickExplorer {
       if(checked>=maxVerifications||watch.elapsed>=maxSearch){
         report('검증 제한에 도달했어요. 나머지는 확인되지 않은 후보로 남겨요.');
         break;
+      }
+      if(origin.source=='연관 페이지만 확인'){
+        results.add(CandidateCheck(origin,'weak',
+          '이미지를 포함한다는 직접 근거가 없는 웹페이지 · '
+          '원본 후보로 검증하지 않고 수동 참고용으로만 표시'));
+        continue;
       }
       final candidateYoutubeId=youtubeId(origin.url);
       if(candidateYoutubeId==null&&tiktokUrl(origin.url)==null)continue;
@@ -395,7 +407,9 @@ class OneClickExplorer {
     _check();
     report('3/3 · 실제 영상 대조 결과 정리 중');
     results.sort((a,b){
-      int weight(String s)=>switch(s){'checked'=>0,'overlay'=>1,'duration'=>2,'unverified'=>3,'unsupported'=>4,_=>5};
+      int weight(String s)=>switch(s){
+        'checked'=>0,'overlay'=>1,'duration'=>2,'unverified'=>3,
+        'weak'=>6,'unsupported'=>4,_=>5};
       return weight(a.status).compareTo(weight(b.status));
     });
     final verified=results.where((r)=>r.status=='checked').length;
