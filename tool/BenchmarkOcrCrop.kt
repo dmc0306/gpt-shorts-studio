@@ -38,13 +38,16 @@ object BenchmarkOcrCrop {
         }
         val width=frame.width;val height=frame.height
         var best:Region?=null
+        // Try wider/taller windows first (up to 94% x 68% of the frame) while
+        // strictly rejecting every OCR-intersecting window. Never expand
+        // across detected captions to make the search look more inclusive.
         // Search multiple aspect/height positions, rather than crop the same
         // top/bottom proportion regardless of where the editor puts subtitles.
-        for(fw in listOf(.88,.77,.67,.57)) for(fh in listOf(.47,.39,.31,.26)){
-            if(fw*fh<.17)continue
+        for(fw in listOf(.94,.90,.84,.76,.66)) for(fh in listOf(.68,.61,.54,.47,.39,.31)){
+            if(fw*fh<.20)continue
             val cw=(width*fw).toInt();val ch=(height*fh).toInt()
             if(cw<130||ch<90)continue
-            for(cx in listOf(.5,.4,.6)) for(cy in listOf(.24,.36,.48,.60,.72)){
+            for(cx in listOf(.5,.42,.58)) for(cy in listOf(.30,.40,.50,.60,.70)){
                 val x=(width*cx-cw/2).toInt().coerceIn(0,width-cw)
                 val y=(height*cy-ch/2).toInt().coerceIn(0,height-ch)
                 val rect=Rect(x,y,x+cw,y+ch)

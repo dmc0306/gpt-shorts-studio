@@ -4,7 +4,14 @@ import 'package:http/http.dart' as http;
 
 /// Duration evidence gates downloads, but never proves two videos are identical.
 class BenchmarkDuration {
-  static int tolerance(int seconds)=>max(3,(seconds*.20).ceil());
+  // A small absolute allowance handles platform rounding and short clips.
+  // A 42-second reference now accepts 37–47 seconds, rather than 33–51 seconds.
+  static int tolerance(int seconds)=>max(2,(seconds*.10).ceil());
+  static bool isShort(int seconds)=>seconds>0&&seconds<=180;
+  /// API duration alone does not prove YouTube Shorts classification.
+  /// Downloaded vertical or square geometry is required as an extra gate.
+  static bool isShortGeometry(int seconds,int? width,int? height)=>
+    isShort(seconds)&&width!=null&&height!=null&&width>0&&height>0&&width<=height;
   static bool similar(int reference,int candidate)=>
     reference>0&&candidate>0&&(reference-candidate).abs()<=tolerance(reference);
   static String label(int reference,int? candidate){

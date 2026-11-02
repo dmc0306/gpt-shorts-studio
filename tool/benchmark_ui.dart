@@ -4,6 +4,7 @@ import 'dart:math';
 import 'dart:typed_data';
 import 'benchmark_stream.dart';
 import 'benchmark_oneclick.dart';
+import 'benchmark_duration.dart';
 import 'package:flutter/material.dart';
 import 'benchmark_data.dart';
 import 'bridge.dart';
@@ -80,7 +81,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
    report('$ok개 채널 분석 성공. 최신 조회수 상위 50개씩 저장했어요. 일부 수집된 채널은 결과가 불완전할 수 있어요.');
   }finally{client.close();}
  });
- Future<void> search(BenchVideo v,{bool manual=false})async{
+ Future<void> search(BenchVideo v,{bool manual=false,bool continuous=false})async{
   if(busy)return;
   if(visionKeyText.text.trim().isEmpty&&keyText.text.trim().isEmpty){
     report('Cloud Vision API 키를 입력해 주세요.');return;
@@ -122,13 +123,57 @@ class _BenchmarkState extends State<BenchmarkScreen>{
       framePreviews[v.id]=previews;
       fullFramePreviews[v.id]=uncropped;
     });
-    report('한국어 OCR로 글자 영역을 제외한 검색 장면 ${previews.length}장 확보 · 동일/유사 길이 (±20%, 최소 ±3초) 후보만 자동 확인');
+    if(!manual&&frames.first is Map){
+      final meta=frames.first as Map;
+      final millis=(meta['durationMs'] as num?)?.toInt()??0;
+      final width=(meta['videoWidth'] as num?)?.toInt();
+      final height=(meta['videoHeight'] as num?)?.toInt();
+      if(!BenchmarkDuration.isShortGeometry((millis/1000).round(),width,height)){
+        report('유튜브 롱폼/가로 영상 제외 · 세로형 또는 정사각형 180초 이하 영상만 자동 탐색해요.');
+        return;
+      }
+    }
+    report('OCR를 피해 넓어진 검색 영역 · 길이 ±10%(최소 ±2초) · 롱폼 제외 · 장면 ${previews.length}장');
     final key=visionKeyText.text.trim().isNotEmpty?visionKeyText.text.trim():keyText.text.trim();
-    final explorer=OneClickExplorer(key,(message)=>report(message),
-      youtubeApiKey:keyText.text.trim(),benchmarkSeconds:v.duration,
-      ignoredUrls:state.rejected[v.id]??const <String>{});
-    activeExplorer=explorer;
-    final result=await explorer.run(v.id,frames);
+    final batches=OneClickExplorer.frameBatches(frames,continuous:continuous);
+    final reviewed=<String>{...(state.rejected[v.id]??<String>{})};
+    final collected=<String,CandidateCheck>{};
+    var totalInspected=0;
+    var roundsDone=0;
+    var lastDiagnostic='';
+    for(final batch in batches){
+      if(cancelled)throw const OneClickCancelled();
+      roundsDone++;
+      report(continuous
+        ?'연속찾기 $roundsDone/${batches.length} · 다른 장면 조합 검사 중 · 중단 버튼으로 종료 가능'
+        :'원본 후보 검색 중');
+      final explorer=OneClickExplorer(key,(message){
+        if(!cancelled)report(continuous
+          ?'연속찾기 $roundsDone/${batches.length} · $message':message);
+      },youtubeApiKey:keyText.text.trim(),benchmarkSeconds:v.duration,
+        ignoredUrls:reviewed);
+      activeExplorer=explorer;
+      final attempt=await explorer.run(v.id,batch);
+      if(cancelled)throw const OneClickCancelled();
+      totalInspected+=attempt.inspected;
+      lastDiagnostic=attempt.diagnostic;
+      for(final check in attempt.results){
+        reviewed.add(check.origin.url); // do not spend quota on the same candidate again
+        collected.putIfAbsent(check.origin.url,()=>check);
+      }
+      // An exact frame + subtitle-screened video match ends the loop, even
+      // when its stream cannot be exported to an editor automatically.
+      if(attempt.match!=null){
+        report('실제 영상 장면 일치 · 연속찾기 자동 종료');
+        break;
+      }
+    }
+    activeExplorer=null;
+    final result=OneClickResult(collected.values.toList(),total:collected.length,
+      inspected:totalInspected,
+      diagnostic:continuous
+        ?'연속찾기 $roundsDone/${batches.length}회 · 서로 다른 후보 ${collected.length}건 · $lastDiagnostic'
+        :lastDiagnostic);
     state.diagnostics[v.id]=result.diagnostic;
     if(cancelled)throw const OneClickCancelled();
     final visible=<BenchOrigin>[];
@@ -138,6 +183,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
         'overlay'=>'제외 · 기존 자막 의심',
         'unrelated'=>'제외 · 실제 영상 불일치',
         'duration'=>'제외 · 영상 길이 불일치 또는 확인 불가',
+        'longform'=>'제외 · 유튜브 롱폼/가로 영상',
         'weak'=>'단순 관련 페이지 · 자동 검증 대상 아님',
         'unsupported'=>'확인 필요 · 플랫폼 미지원',
         'error'=>'확인 실패',_=>'확인 필요'
@@ -158,6 +204,8 @@ class _BenchmarkState extends State<BenchmarkScreen>{
       state.chosen.remove(v.id);
     }
     await save();
+    final match=result.match;
+    if(match!=null)state.chosen[v.id]=match.origin.url;
     final best=result.best;
     if(best?.clip!=null){
       state.chosen[v.id]=best!.origin.url;
@@ -179,8 +227,10 @@ class _BenchmarkState extends State<BenchmarkScreen>{
       await Navigator.push(context,MaterialPageRoute(builder:(_)=>EditorScreen(
         clip:original,onSave:widget.onSave,autoGenerateOnOpen:true)));
       report('자동 확인된 후보를 편집기로 연결했어요. 게시 전 원본·기존 자막 여부를 최종 확인해 주세요.');
+    }else if(match!=null){
+      report('영상 장면·자막 검증은 통과했지만 자동 파일 확보가 불가능해요. 아래의 확인된 원본 링크로 직접 검토해 주세요.');
     }else{
-      report('${result.diagnostic} 최종 템플릿 제작 가능 원본 없음. 후보별 사유를 아래에서 확인하세요.');
+      report('${result.diagnostic} 일치 원본 미확인 · 후보를 확인하거나 나중에 다시 탐색할 수 있어요.');
     }
   });
   }finally{
@@ -290,6 +340,8 @@ class _BenchmarkState extends State<BenchmarkScreen>{
      Wrap(spacing:8,children:[
       FilledButton.icon(onPressed:busy?null:()=>search(v),
         icon:const Icon(Icons.auto_awesome),label:const Text('원클릭 원본 탐색 → 검증 → 제작')),
+      FilledButton.icon(onPressed:busy?null:()=>search(v,continuous:true),
+        icon:const Icon(Icons.repeat),label:const Text('연속찾기 · 일치할 때까지 탐색')),
       OutlinedButton(onPressed:busy?null:()=>search(v,manual:true),child:const Text('영상 파일 직접 선택')),
       OutlinedButton(onPressed:busy?null:()=>addOrigin(v),child:const Text('원본 링크 추가'))]),
      if(busy&&activeVideoId==v.id)...[

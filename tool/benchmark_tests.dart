@@ -258,11 +258,18 @@ void main(){
    expect(BenchmarkDuration.iso8601('PT1M10S'),70);
    expect(BenchmarkDuration.iso8601('PT2H1M3S'),7263);
    expect(BenchmarkDuration.iso8601('not-a-duration'),null);
-   expect(BenchmarkDuration.tolerance(42),9);
-   expect(BenchmarkDuration.similar(42,51),true);
-   expect(BenchmarkDuration.similar(42,52),false);
-   expect(BenchmarkDuration.similar(8,5),true);
-   expect(BenchmarkDuration.similar(8,4),false);
+   expect(BenchmarkDuration.tolerance(42),5);
+   expect(BenchmarkDuration.similar(42,47),true);
+   expect(BenchmarkDuration.similar(42,48),false);
+   expect(BenchmarkDuration.similar(8,6),true);
+   expect(BenchmarkDuration.similar(8,5),false);
+   expect(BenchmarkDuration.isShort(180),true);
+   expect(BenchmarkDuration.isShort(181),false);
+   expect(BenchmarkDuration.isShortGeometry(42,1080,1920),true);
+   expect(BenchmarkDuration.isShortGeometry(42,1080,1080),true);
+   expect(BenchmarkDuration.isShortGeometry(42,1920,1080),false);
+   expect(BenchmarkDuration.isShortGeometry(200,1080,1920),false);
+   expect(BenchmarkDuration.isShortGeometry(40,null,null),false);
    expect(BenchmarkDuration.label(42,null),contains('확인 불가'));
    expect(BenchmarkDuration.label(42,60),contains('길이 불일치'));
  });
@@ -336,6 +343,31 @@ void main(){
    ],'AbcDefGhI12');
    expect(list.length,3);
    expect(list.every((e)=>e.source=='연관 페이지만 확인'),true);
+ });
+ test('Continuous searches rotate chronological source frames and do not repeat identical batches',(){
+   final frames=[
+     for(var i=0;i<9;i++){'timeMs':9000-i*1000,'hash':'h$i'},
+   ];
+   final rounds=OneClickExplorer.frameBatches(frames,continuous:true);
+   expect(rounds.length,6);
+   final ids=<String>{};
+   for(final round in rounds){
+     expect(round.length,5);
+     final times=[for(final x in round)(x['timeMs'] as num).toInt()];
+     expect(times,times.toList()..sort());
+     expect(ids.add(times.join(',')),true);
+   }
+   final single=OneClickExplorer.frameBatches(frames);
+   expect(single.length,1);
+   expect(single.single.length,6);
+   expect(OneClickExplorer.frameBatches([],continuous:true),isEmpty);
+ });
+ test('Repeated search with only 3 scenes is bounded',(){
+   final rounds=OneClickExplorer.frameBatches([
+     for(var i=0;i<3;i++){'timeMs':i*1000},
+   ],continuous:true);
+   expect(rounds.length,1);
+   expect(rounds.single.length,3);
  });
  test('Rejected links persist per benchmark and can be cleared',(){
    final state=BenchState();

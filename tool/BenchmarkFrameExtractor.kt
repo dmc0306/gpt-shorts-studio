@@ -50,6 +50,12 @@ object BenchmarkFrameExtractor {
             val duration=media.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
                 ?:error("후보 영상 길이 확인 실패")
             require(duration in 500L..600000L)
+            val rawWidth=media.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull()?:0
+            val rawHeight=media.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull()?:0
+            val rotation=media.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull()?:0
+            val videoWidth=if(rotation%180!=0)rawHeight else rawWidth
+            val videoHeight=if(rotation%180!=0)rawWidth else rawHeight
+            require(videoWidth>0 && videoHeight>0){"후보 영상의 가로·세로 해상도 확인 실패"}
             val result=mutableListOf<Map<String,Any>>()
             for(i in 0 until 16) {
                 val ms=(duration*(i+0.5)/16).toLong().coerceIn(0,duration-1)
@@ -69,7 +75,8 @@ object BenchmarkFrameExtractor {
                         val info=perceptualHash(clean)
                         result.add(mapOf("hash" to info.first,"contrast" to info.second,
                             "timeMs" to ms,"durationMs" to duration,
-                             "cropIndex" to cropIndex))
+                            "videoWidth" to videoWidth,"videoHeight" to videoHeight,
+                            "cropIndex" to cropIndex))
                       }finally{clean.recycle()}
                     }
                 } finally {frame.recycle()}
@@ -132,14 +139,19 @@ object BenchmarkFrameExtractor {
         val duration=media.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
             ?:error("영상 길이 확인 실패")
         require(duration in 500L..600000L){"0.5초~10분 영상만 분석할 수 있어요."}
+        val rawWidth=media.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull()?:0
+        val rawHeight=media.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull()?:0
+        val rotation=media.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull()?:0
+        val videoWidth=if(rotation%180!=0)rawHeight else rawWidth
+        val videoHeight=if(rotation%180!=0)rawWidth else rawHeight
         val scenes=mutableListOf<Map<String,Any>>()
         val recognizer=BenchmarkOcrCrop.newRecognizer()
         try{
-            // Six primary positions cover the whole clip. The remaining
-            // six fill gaps only when subtitles occlude a primary position.
+            // Collect up to nine OCR-free scenes for distinct search rounds.
+            // Alternate the timeline instead of re-searching identical frames.
             val positions=listOf(0,2,4,6,8,10,1,3,5,7,9,11)
             for(index in positions){
-                if(scenes.size>=6)break
+                if(scenes.size>=9)break
                 val ms=(duration*(index+.5)/12).toLong().coerceIn(0,duration-1)
                 val frame=media.getScaledFrameAtTime(ms*1000,
                     MediaMetadataRetriever.OPTION_CLOSEST,720,960)?:continue
@@ -156,6 +168,7 @@ object BenchmarkFrameExtractor {
                         val full=fullBuffer.toByteArray()
                         val hash=perceptualHash(clean)
                         scenes.add(mapOf("timeMs" to ms,"durationMs" to duration,
+                            "videoWidth" to videoWidth,"videoHeight" to videoHeight,
                             "ocrExcluded" to true,"ocrTextBoxes" to region.detected,
                             "bounds" to region.normalized(frame.width,frame.height),
                             "content" to Base64.encodeToString(cropped,Base64.NO_WRAP),
