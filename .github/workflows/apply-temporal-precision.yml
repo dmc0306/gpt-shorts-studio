@@ -1,0 +1,28 @@
+name: Apply original-video temporal precision
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tool/patch_temporal_precision.py'
+      - 'tool/benchmark_oneclick.dart'
+      - 'tool/BenchmarkFrameExtractor.kt'
+      - 'tool/benchmark_tests.dart'
+      - '.github/workflows/apply-temporal-precision.yml'
+permissions:
+  contents: write
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: true}
+      - name: Package v0.21.15 source
+        run: python3 tool/patch_temporal_precision.py
+      - name: Commit versioned app ZIP
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add shorts-studio-source.zip
+          git diff --cached --quiet && { echo "No source changes"; exit 1; }
+          git commit -m "Apply time-ordered original-video matcher to Android source"
+          git push
