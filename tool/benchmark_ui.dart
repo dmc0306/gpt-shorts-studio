@@ -143,8 +143,17 @@ class _BenchmarkState extends State<BenchmarkScreen>{
       visible.add(BenchOrigin(item.origin.url,'$prefix · ${item.detail}',item.status=='checked'?
         '실제 동영상 교차확인':'검증되지 않은 검색 후보'));
     }
-    state.origins[v.id]=visible;
-    state.chosen.remove(v.id);
+    // Preserve user-supplied original links across future image searches.
+    final manual=(state.origins[v.id]??<BenchOrigin>[])
+        .where((x)=>x.source=='직접 추가').toList();
+    state.origins[v.id]=[...manual,
+      ...visible.where((x)=>!manual.any((m)=>m.url==x.url))];
+    final confirmed=state.confirmed[v.id];
+    if(confirmed!=null){
+      state.chosen[v.id]=confirmed;
+    }else{
+      state.chosen.remove(v.id);
+    }
     await save();
     final best=result.best;
     if(best?.clip!=null){
@@ -257,7 +266,15 @@ class _BenchmarkState extends State<BenchmarkScreen>{
   finally{if(mounted)setState(()=>busy=false);}
  }
  Widget candidateCard(BenchVideo v){
-   final list=state.origins[v.id]??[],selected=state.chosen[v.id];
+   final userOriginal=state.confirmed[v.id];
+   final other=state.origins[v.id]??<BenchOrigin>[];
+   final list=<BenchOrigin>[
+     if(userOriginal!=null)BenchOrigin(userOriginal,
+       '사용자가 원본이라고 제공한 링크 · 자동 이미지 검색의 발견 성과로 계산하지 않음',
+       '사용자 제공 원본'),
+     ...other.where((x)=>x.url!=userOriginal)
+   ];
+   final selected=state.chosen[v.id];
    final canCreate=selected!=null&&!busy;
   return Card(child:Padding(padding:const EdgeInsets.all(12),child:Column(
     crossAxisAlignment:CrossAxisAlignment.stretch,children:[
