@@ -6,6 +6,7 @@ import 'package:shorts_studio/benchmark_data.dart';
 import 'package:shorts_studio/vision_reverse.dart';
 import 'package:shorts_studio/benchmark_stream.dart';
 import 'package:shorts_studio/benchmark_oneclick.dart';
+import 'package:shorts_studio/benchmark_duration.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
 void main(){
@@ -211,6 +212,34 @@ void main(){
    expect(denied,contains('403'));
    final huge=CandidateFailure.describe(StateError(List.filled(400,'x').join()));
    expect(huge.length,lessThan(220));
+ });
+
+ test('ISO8601 YouTube durations and video length thresholds are bounded',(){
+   expect(BenchmarkDuration.iso8601('PT42S'),42);
+   expect(BenchmarkDuration.iso8601('PT1M10S'),70);
+   expect(BenchmarkDuration.iso8601('PT2H1M3S'),7263);
+   expect(BenchmarkDuration.iso8601('not-a-duration'),null);
+   expect(BenchmarkDuration.tolerance(42),9);
+   expect(BenchmarkDuration.similar(42,51),true);
+   expect(BenchmarkDuration.similar(42,52),false);
+   expect(BenchmarkDuration.similar(8,5),true);
+   expect(BenchmarkDuration.similar(8,4),false);
+   expect(BenchmarkDuration.label(42,null),contains('확인 불가'));
+   expect(BenchmarkDuration.label(42,60),contains('길이 불일치'));
+ });
+ test('Multiple OCR crops from one candidate time do not fake distinct scenes',(){
+   final reference=[
+     {'hash':'aaaaaaaaaaaaaaaa','contrast':42},
+     {'hash':'5555555555555555','contrast':42},
+   ];
+   final sameFrame=[
+     {'hash':'aaaaaaaaaaaaaaaa','contrast':44,'timeMs':2000},
+     {'hash':'5555555555555555','contrast':44,'timeMs':2000},
+   ];
+   final m=VideoMatch.match(reference,sameFrame);
+   expect(m.matched,2);
+   expect(m.distinctCandidate,1);
+   expect(VideoMatch.strong(m),false);
  });
 
 }
