@@ -134,9 +134,12 @@ object BenchmarkFrameExtractor {
         val scenes=mutableListOf<Map<String,Any>>()
         val recognizer=BenchmarkOcrCrop.newRecognizer()
         try{
-            for(index in 0 until 12){
+            // Six primary positions cover the whole clip. The remaining
+            // six fill gaps only when subtitles occlude a primary position.
+            val positions=listOf(0,2,4,6,8,10,1,3,5,7,9,11)
+            for(index in positions){
                 if(scenes.size>=6)break
-                val ms=(duration*(index+.75)/13).toLong().coerceIn(0,duration-1)
+                val ms=(duration*(index+.5)/12).toLong().coerceIn(0,duration-1)
                 val frame=media.getScaledFrameAtTime(ms*1000,
                     MediaMetadataRetriever.OPTION_CLOSEST_SYNC,720,960)?:continue
                 try{
