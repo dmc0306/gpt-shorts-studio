@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 /// Duration evidence gates downloads, but never proves two videos are identical.
 class BenchmarkDuration {
   // A small absolute allowance handles platform rounding and short clips.
-  // A 42-second reference now accepts 38–46 seconds, not 33–51 seconds.
+  // A 42-second reference now accepts 37–47 seconds, rather than 33–51 seconds.
   static int tolerance(int seconds)=>max(2,(seconds*.10).ceil());
   static bool isShort(int seconds)=>seconds>0&&seconds<=180;
   /// API duration alone does not prove YouTube Shorts classification.
