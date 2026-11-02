@@ -256,3 +256,16 @@ CI results and device behavior must be reported separately. Passing CI does not 
 개선: YouTube 썸네일 최대 1MB/9초 확보 후 네이티브 dHash로 참조 프레임 비교, 단 이 결과는 영상 미검증 단서일 뿐 원본 자동 승인 불가. 한 실행에서 YouTube 스트림 확보 실패 시 후속 YouTube 후보의 반복 긴 다운로드를 생략하고 썸네일만 확인. 검증되지 않은 후보도 '후보 게시물 열어보기' 버튼으로 브라우저 열기. TikTok 10204, YouTube 403/타임아웃/취소를 짧고 명확하게 표시하고 raw HTML/JSON 원문 표시 금지. 실제 비디오 프레임과 OCR 모두 통과하지 않은 후보는 자동 제작 불가.
 패치 과정 회귀: 최초 Python bytes Unicode assertion SyntaxError 수정; v0.21.4~0.21.6에서 Dart CandidateThumbnail 소스 삽입 후 소스가 잘리거나 OneClickExplorer가 두 번 선언되어 flutter analyze 에서 unterminated_string_literal 및 duplicate_definition 오류 발생. 최종 tool/benchmark_oneclick.dart 완전 복원, 후미 중복 코드 제거, tool/patch_candidate_clean.py로 v0.21.7+66 소스 생성.
 검증 완료: GitHub Actions https://github.com/dmc0306/gpt-shorts-studio/actions/runs/41312551306 성공. Flutter analyze/test, Android 고정 서명 APK 컴파일, 서명 검사, artifact 업로드 통과. Artifact shorts-studio-debug-apk id 13086575985. 실기기 스트림 접근 개선과 실제 검색 적중률은 미확인.
+
+
+## 2026-11-02 — v0.21.10+69 실제 OCR 자막 영역 회피 및 원본 후보 영상 길이 제한
+
+사용자 실기기 화면: Cloud Vision에서 원본 못 찾고, 프레임 안에 한국어 합성 자막이 남아 있으며, 전혀 다른 길이의 소셜 영상이 후보가 됨. 이전의 세로 영상 상단 30%/하단 35% 고정 크롭은 실제 OCR 감지가 아니었기 때문에 화면 중간 자막을 차단하지 못함. 영상 길이도 공식 메타데이터로 사전 판정하지 않았음.
+
+구현: Android 앱에 이미 탑재된 Google ML Kit 한국어 OCR을 검색용 프레임에도 실행, bounding box+padding이 겹치지 않는 최대 검색 영역을 다양한 x/y/폭/높이 조합에서 선택. OCR 오류 시 조용히 원래 이미지로 대체하지 않음. 영상 전 구간에 분산한 6개 장면 추출, 자막과 충돌할 때 추가 후보 시점 탐색(최대 12회). 3장 미만이면 명시적 실패. 각 프레임의 검색용 bounding box를 후보 영상 지문 비교에 그대로 적용, 같은 후보 타임스탬프의 다른 크롭 여러 개는 독립 장면으로 중복 계산하지 않음. OCR이 놓친 효과 자막은 여전히 남을 수 있고 인페인팅은 하지 않음.
+
+재생시간 조건: 기준 영상 길이 ±20% (최소 ±3초), 예컨대 42초 기준 33~51초. YouTube Data API `videos.list(part=contentDetails)` 결과 ISO8601 `duration`을 후보 URL 최대 24건에 대해 배치 조회해 길이 일치 영상부터 자동 확인. API 키 부재/길이 확인 불가/길이 불일치 YouTube 후보는 자동 다운로드하지 않고 판정 보류 또는 제외 사유 표시. TikTok 기존 페이지 메타데이터에는 다운로드 전 범위를 적용하고, 파일 확보 후 실제 길이 재확인. 영상 길이 일치는 동일 원본 증거가 아니며 기존 프레임 대조와 자막 의심 검사를 유지.
+
+코드: `tool/BenchmarkOcrCrop.kt` 신규, `tool/BenchmarkFrameExtractor.kt`, `tool/benchmark_duration.dart`, `tool/benchmark_oneclick.dart`, `tool/benchmark_ui.dart`, `tool/benchmark_tests.dart`. 통합: `tool/patch_ocr_duration.py`; 분산 장면 보강 `tool/patch_ocr_spread.py`. 버전 v0.21.10+69.
+
+검증: GitHub Actions https://github.com/dmc0306/gpt-shorts-studio/actions/runs/41367125984 성공: Flutter analyze, Flutter 전체 테스트, 서명 APK 빌드, 고정 인증서 검증, artifact 업로드 통과. APK artifact `shorts-studio-debug-apk` ID 13107124033. 실기기 OCR 검색 이미지 품질 및 실제 원본 발견률 미검증. Google Cloud Vision 웹 이미지 색인이 원본을 포함하지 않으면 결과가 계속 없을 수 있음. 자동화된 플랫폼 스트림 제한 문제도 그대로 존재할 수 있음.
