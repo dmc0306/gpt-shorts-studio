@@ -40,7 +40,7 @@ object BenchmarkFrameExtractor {
      * Candidate video is sampled at 16 moments. Return compact visual hashes,
      * not full frames, to avoid unnecessarily large platform-channel payloads.
      */
-    fun fingerprints(file:File):List<Map<String,Any>> {
+    fun fingerprints(file:File,bounds:List<Map<String,Double>> = emptyList()):List<Map<String,Any>> {
         require(file.isFile&&file.length() in 10240L..(512L*1024*1024)) {
             "후보 영상 파일 크기 또는 접근 오류"
         }
@@ -56,12 +56,21 @@ object BenchmarkFrameExtractor {
                 val frame=media.getScaledFrameAtTime(ms*1000L,
                     MediaMetadataRetriever.OPTION_CLOSEST_SYNC,480,480)?:continue
                 try {
-                    val clean=centerCrop(frame)
-                    try {
+                    val windows=if(bounds.isEmpty())listOf(
+                      mapOf("x" to 0.07,"y" to 0.30,"w" to 0.86,"h" to 0.35))
+                      else bounds.take(8)
+                    for(window in windows){
+                      val x=((window["x"]?:0.07)*frame.width).toInt().coerceIn(0,frame.width-2)
+                      val y=((window["y"]?:0.30)*frame.height).toInt().coerceIn(0,frame.height-2)
+                      val w=((window["w"]?:0.86)*frame.width).toInt().coerceIn(2,frame.width-x)
+                      val h=((window["h"]?:0.35)*frame.height).toInt().coerceIn(2,frame.height-y)
+                      val clean=Bitmap.createBitmap(frame,x,y,w,h)
+                      try{
                         val info=perceptualHash(clean)
-                        result.add(mapOf("hash" to info.first, "contrast" to info.second,
+                        result.add(mapOf("hash" to info.first,"contrast" to info.second,
                             "timeMs" to ms))
-                    } finally {clean.recycle()}
+                      }finally{clean.recycle()}
+                    }
                 } finally {frame.recycle()}
             }
             require(result.size>=4){"후보에서 비교할 장면이 너무 적어요."}
@@ -120,46 +129,40 @@ object BenchmarkFrameExtractor {
 
     private fun extractInternal(media:MediaMetadataRetriever): List<Map<String,Any>> {
         val duration=media.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
-            ?:error("영상 재생시간을 확인하지 못했어요.")
-        require(duration in 500L..600000L){"0.5초~10분 영상만 장면 검색에 사용할 수 있어요."}
-        val fractions=listOf(0.12,0.28,0.45,0.62,0.79,0.91)
-        val result=mutableListOf<Map<String,Any>>()
-        fractions.forEachIndexed { index, fraction ->
-            val timeMs=(duration*fraction).toLong().coerceIn(0L,duration-1)
-            val frame=media.getScaledFrameAtTime(timeMs*1000L,
-                MediaMetadataRetriever.OPTION_CLOSEST_SYNC,720,720) ?: return@forEachIndexed
-            try {
-                // All frames: trim persistent subtitle/title overlays before
-                // sending images to Cloud Vision; previous code left the
-                // first and last samples completely untrimmed.
-                val clean=centerCrop(frame)
-                try {
-                // Keep a separate uncropped snapshot for image-search apps.
-                // Vision continues to receive only the central action region.
-                val fullBuffer=ByteArrayOutputStream()
-                check(frame.compress(Bitmap.CompressFormat.JPEG,85,fullBuffer)){
-                    "전체 장면 JPEG 변환 실패"
-                }
-                val fullBytes=fullBuffer.toByteArray()
-                val buffer=ByteArrayOutputStream()
-                check(clean.compress(Bitmap.CompressFormat.JPEG,82,buffer)){"영상 장면을 JPEG로 변환하지 못했어요."}
-                val bytes=buffer.toByteArray()
-                if(bytes.size in 100..1000000) {
-                    result.add(mapOf("timeMs" to timeMs,
-                        "crop" to true,
-                        "content" to Base64.encodeToString(bytes,Base64.NO_WRAP),
-                        "originalContent" to if(fullBytes.size<=1000000)
-                            Base64.encodeToString(fullBytes,Base64.NO_WRAP)
-                            else Base64.encodeToString(bytes,Base64.NO_WRAP),
-                        "hash" to perceptualHash(clean).first,
-                        "contrast" to perceptualHash(clean).second))
-                }
-                } finally {
-                if(clean !== frame)clean.recycle()
-                }
-            } finally {frame.recycle()}
-        }
-        check(result.size>=3){"검색 가능한 주요 장면을 세 장 이상 추출하지 못했어요."}
-        return result
+            ?:error("영상 길이 확인 실패")
+        require(duration in 500L..600000L){"0.5초~10분 영상만 분석할 수 있어요."}
+        val scenes=mutableListOf<Map<String,Any>>()
+        val recognizer=BenchmarkOcrCrop.newRecognizer()
+        try{
+            for(index in 0 until 12){
+                if(scenes.size>=6)break
+                val ms=(duration*(index+.75)/13).toLong().coerceIn(0,duration-1)
+                val frame=media.getScaledFrameAtTime(ms*1000,
+                    MediaMetadataRetriever.OPTION_CLOSEST_SYNC,720,960)?:continue
+                try{
+                    val region=BenchmarkOcrCrop.select(frame,recognizer)?:continue
+                    val clean=Bitmap.createBitmap(frame,region.x,region.y,region.w,region.h)
+                    try{
+                        val croppedBuffer=ByteArrayOutputStream()
+                        check(clean.compress(Bitmap.CompressFormat.JPEG,87,croppedBuffer))
+                        val cropped=croppedBuffer.toByteArray()
+                        if(cropped.size !in 100..1000000)continue
+                        val fullBuffer=ByteArrayOutputStream()
+                        check(frame.compress(Bitmap.CompressFormat.JPEG,82,fullBuffer))
+                        val full=fullBuffer.toByteArray()
+                        val hash=perceptualHash(clean)
+                        scenes.add(mapOf("timeMs" to ms,"durationMs" to duration,
+                            "ocrExcluded" to true,"ocrTextBoxes" to region.detected,
+                            "bounds" to region.normalized(frame.width,frame.height),
+                            "content" to Base64.encodeToString(cropped,Base64.NO_WRAP),
+                            "originalContent" to Base64.encodeToString(
+                                if(full.size<=1000000)full else cropped,Base64.NO_WRAP),
+                            "hash" to hash.first,"contrast" to hash.second))
+                    }finally{clean.recycle()}
+                }finally{frame.recycle()}
+            }
+        }finally{recognizer.close()}
+        check(scenes.size>=3){"자막과 겹치지 않는 장면이 ${scenes.size}장뿐이에요. 최소 3장 이상 필요해요."}
+        return scenes
     }
 }
