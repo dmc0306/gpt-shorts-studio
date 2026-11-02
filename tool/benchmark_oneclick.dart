@@ -59,8 +59,10 @@ class OneClickResult {
   }
 }
 
-/// Each reference frame may correlate with a different original clip in a
-/// compilation. Two *distinct* scenes with low dHash distance are required.
+/// A matching crop from one keyframe is not proof of a matching video.
+/// Require independent scenes in chronological order, bound to the same
+/// OCR-free reference region. This is still visual evidence, not proof of
+/// authorship or licensing.
 class VideoMatch {
   static int distance(String a,String b){
     if(!RegExp(r'^[0-9a-fA-F]{16}$').hasMatch(a)||!RegExp(r'^[0-9a-fA-F]{16}$').hasMatch(b))return 64;
@@ -69,40 +71,85 @@ class VideoMatch {
     while(diff>BigInt.zero){diff=diff&(diff-BigInt.one);bits++;}
     return bits;
   }
-  static ({int matched,int best,int distinctCandidate}) match(List<dynamic> reference,List<dynamic> candidate){
-    final candidates=<({String hash,double contrast,int index})>[];
-    for(var i=0;i<candidate.length;i++){
-      final value=candidate[i];
-      if(value is! Map)continue;
-      final hash=value['hash'] as String? ?? '';
-      final contrast=(value['contrast'] as num? ?? 0).toDouble();
-      if(hash.length==16&&contrast>=15){
-        final moment=(value['timeMs'] as num?)?.toInt()??i;
-        candidates.add((hash:hash,contrast:contrast,index:moment));
-      }
-    }
-    final observed=<int>{},matchedReference=<int>{};
-    var best=64;
+
+  static ({int matched,int best,int distinctCandidate}) match(
+      List<dynamic> reference,List<dynamic> candidate){
+    final refs=<({int index,int time,String hash})>[];
     for(var i=0;i<reference.length;i++){
-      final item=reference[i];
-      if(item is! Map)continue;
-      final hash=item['hash'] as String? ?? '';
-      final contrast=(item['contrast'] as num? ?? 0).toDouble();
-      if(hash.length!=16||contrast<15)continue;
-      var minDistance=64,closest=-1;
-      for(final sample in candidates){
-        final d=distance(hash,sample.hash);
-        if(d<minDistance){minDistance=d;closest=sample.index;}
-      }
-      if(minDistance<best)best=minDistance;
-      if(minDistance<=9&&closest>=0){
-        matchedReference.add(i);observed.add(closest);
+      final sample=reference[i];
+      if(sample is! Map)continue;
+      final hash=sample['hash'];
+      if(hash is! String||!RegExp(r'^[0-9a-fA-F]{16}$').hasMatch(hash)||
+          (sample['contrast'] as num? ?? 0)<15)continue;
+      refs.add((index:i,time:(sample['timeMs'] as num?)?.toInt()??i*1000,hash:hash));
+    }
+    refs.sort((a,b)=>a.time.compareTo(b.time));
+    final videos=<({int time,String hash,int? cropIndex})>[];
+    for(var i=0;i<candidate.length;i++){
+      final sample=candidate[i];
+      if(sample is! Map)continue;
+      final hash=sample['hash'];
+      if(hash is! String||!RegExp(r'^[0-9a-fA-F]{16}$').hasMatch(hash)||
+          (sample['contrast'] as num? ?? 0)<15)continue;
+      videos.add((time:(sample['timeMs'] as num?)?.toInt()??i*1000,
+        hash:hash,cropIndex:(sample['cropIndex'] as num?)?.toInt()));
+    }
+    // Only compare matching crop windows. A different crop may have
+    // coincidentally similar dHash values despite different underlying scenes.
+    final edges=<({int ref,int time,String refHash,String candidateHash,int diff})>[];
+    var globalBest=64;
+    for(var ri=0;ri<refs.length;ri++){
+      final original=refs[ri];
+      for(final video in videos){
+        if(video.cropIndex!=null&&video.cropIndex!=original.index)continue;
+        final d=distance(original.hash,video.hash);
+        if(d<globalBest)globalBest=d;
+        if(d<=8)edges.add((ref:ri,time:video.time,refHash:original.hash,
+          candidateHash:video.hash,diff:d));
       }
     }
-    return(matched:matchedReference.length,best:best,distinctCandidate:observed.length);
+    if(edges.isEmpty)return(matched:0,best:globalBest,distinctCandidate:0);
+    edges.sort((a,b){
+      final r=a.ref.compareTo(b.ref);
+      return r!=0?r:a.time.compareTo(b.time);
+    });
+    final lengths=List<int>.filled(edges.length,1);
+    final previous=List<int>.filled(edges.length,-1);
+    for(var i=0;i<edges.length;i++){
+      final current=edges[i];
+      for(var j=0;j<i;j++){
+        final before=edges[j];
+        if(before.ref>=current.ref||before.time+700>current.time)continue;
+        // Repeated/static shots must not count as multiple distinct scenes.
+        if(distance(before.refHash,current.refHash)<5||
+           distance(before.candidateHash,current.candidateHash)<5)continue;
+        if(lengths[j]+1>lengths[i]){
+          lengths[i]=lengths[j]+1;
+          previous[i]=j;
+        }
+      }
+    }
+    var chosen=0;
+    for(var i=1;i<edges.length;i++){
+      if(lengths[i]>lengths[chosen])chosen=i;
+      else if(lengths[i]==lengths[chosen]&&edges[i].diff<edges[chosen].diff){
+        chosen=i;
+      }
+    }
+    final moments=<int>{};
+    var best=64,count=0;
+    for(var at=chosen;at>=0;at=previous[at]){
+      moments.add(edges[at].time);
+      if(edges[at].diff<best)best=edges[at].diff;
+      count++;
+    }
+    return(matched:count,best:best,distinctCandidate:moments.length);
   }
+
+  // Three temporally consistent scenes are needed for automatic handoff.
+  // Two plausible scenes remain unverified leads; do not auto-produce.
   static bool strong(({int matched,int best,int distinctCandidate}) m)=>
-    m.matched>=2&&m.distinctCandidate>=2&&m.best<=6;
+    m.matched>=3&&m.distinctCandidate>=3&&m.best<=6;
 }
 
 /// ML Kit OCR bounding boxes only; repeated top/bottom text across sampled
@@ -120,7 +167,8 @@ class OverlayCheck {
       final letters=(raw['letters'] as num? ?? 0).toInt();
       final time=(raw['time'] as num? ?? -1).toDouble();
       if(letters<3||width<.18||time<0)continue;
-      if(!(y<.24||y>.66))continue;
+      // Captions may sit in the middle; large repeated central text matters too.
+      if(!(y<.24||y>.66|| (width>=.28&&letters>=5)))continue;
       final key=((y*12).round()*20)+(x*4).round();
       cells.putIfAbsent(key,()=>{}).add(time.floor());
     }
@@ -271,7 +319,7 @@ class OneClickExplorer {
       final match=VideoMatch.match(reference,frames);
       if(!VideoMatch.strong(match)){
         return CandidateCheck(origin,'unrelated',
-          '실제 영상 비교에서 불일치 · 일치 장면 ${match.matched}개, 최저 해시 거리 ${match.best}/64');
+          '실제 영상의 시간 순서·장면 교차검증 미통과 · 연속 일치 장면 ${match.matched}개, 최저 해시 거리 ${match.best}/64');
       }
       if(raw['text'] is! Map){
         return CandidateCheck(origin,'error','장면은 일치했지만 기존 자막 검사에 실패해 보류합니다.');
@@ -281,7 +329,7 @@ class OneClickExplorer {
       }
       retainDownloaded=true;
       return CandidateCheck(origin,'checked',
-        '실제 영상 ${match.matched}개 장면 교차일치 · 자막 의심 신호 미검출 (수동 최종 확인 권장)',
+        '시간 순서가 맞는 영상 ${match.matched}개 장면 대조 통과 · 자막 의심 미검출 (원제작자·저작권 수동 확인 필요)',
         clip:downloaded);
     }on OneClickCancelled{
       rethrow;
