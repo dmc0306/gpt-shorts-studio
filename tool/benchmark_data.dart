@@ -85,7 +85,7 @@ class BenchState {
     if(raw['channels'] is Map){
       b.channels.clear();
       (raw['channels'] as Map).forEach((k,v){
-        if(k is String&&v is String&&RegExp(r'^UC[\\w-]{22}$').hasMatch(k)){
+        if(k is String&&v is String&&RegExp(r'^UC[\w-]{22}$').hasMatch(k)){
           b.channels[k]=v;
         }
       });
