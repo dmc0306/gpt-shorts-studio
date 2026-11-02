@@ -1,0 +1,24 @@
+name: Inspect TikTok short URL handling
+on:
+  push:
+    paths: ['.github/workflows/inspect-short-url.yml']
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Find TikTok URL recognizer and shortlink redirect support
+        run: |
+          python3 - <<'PY'
+          from zipfile import ZipFile
+          z=ZipFile('shorts-studio-source.zip')
+          for p in z.namelist():
+            if not p.startswith('lib/') or not p.endswith('.dart'):continue
+            s=z.read(p).decode('utf-8').splitlines()
+            for i,line in enumerate(s):
+              if 'tiktokUrl(' in line or 'vt.tiktok.com' in line or 'vm.tiktok.com' in line:
+                print('---',p,'line',i+1)
+                for n in range(max(0,i-3),min(len(s),i+16)):
+                  print(f'{n+1}: {s[n]}')
+          PY
