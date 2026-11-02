@@ -150,6 +150,8 @@ class VideoMatch {
   // Two plausible scenes remain unverified leads; do not auto-produce.
   static bool strong(({int matched,int best,int distinctCandidate}) m)=>
     m.matched>=3&&m.distinctCandidate>=3&&m.best<=6;
+  static bool plausible(({int matched,int best,int distinctCandidate}) m)=>
+    m.matched>=2&&m.distinctCandidate>=2&&m.best<=6;
 }
 
 /// ML Kit OCR bounding boxes only; repeated top/bottom text across sampled
@@ -318,6 +320,10 @@ class OneClickExplorer {
       }
       final match=VideoMatch.match(reference,frames);
       if(!VideoMatch.strong(match)){
+        if(VideoMatch.plausible(match)){
+          return CandidateCheck(origin,'unverified',
+            '시간 순서상 유사한 장면 ${match.matched}개 · 자동 확정 기준 3개 미달 · 원본 후보로 수동 확인 필요');
+        }
         return CandidateCheck(origin,'unrelated',
           '실제 영상의 시간 순서·장면 교차검증 미통과 · 연속 일치 장면 ${match.matched}개, 최저 해시 거리 ${match.best}/64');
       }
