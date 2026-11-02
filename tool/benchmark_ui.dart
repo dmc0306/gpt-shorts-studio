@@ -136,7 +136,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
     report('OCR를 피해 넓어진 검색 영역 · 길이 ±10%(최소 ±2초) · 롱폼 제외 · 장면 ${previews.length}장');
     final key=visionKeyText.text.trim().isNotEmpty?visionKeyText.text.trim():keyText.text.trim();
     final batches=OneClickExplorer.frameBatches(frames,continuous:continuous);
-    final reviewed=<String>{...state.rejected[v.id]??const <String>{}};
+    final reviewed=<String>{...(state.rejected[v.id]??<String>{})};
     final collected=<String,CandidateCheck>{};
     var totalInspected=0;
     var roundsDone=0;
