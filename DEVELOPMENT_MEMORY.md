@@ -298,3 +298,9 @@ PR #4 Flutter analyze 및 Flutter 전체 테스트 통과: https://github.com/dm
 OCR 보강: 기존 1글자 자막을 무시하던 검사에서 숫자/문자 1개도 검사하고, 인식 텍스트 주변 패딩 확대. 1차 OCR이 선택한 자막 비접촉 큰 크롭 후보를 최대 8개까지 확대하여 2차 OCR을 실시한 후 잔여 텍스트가 없다고 검사된 크롭만 검색에 사용. 누락 시 다른 크롭/프레임을 사용하고 최소 3장 미만이면 실패를 명시. OCR 모델이 장식적인 글자를 반드시 찾는 것은 아니므로 실기기 적중률을 보장하지 않음.
 
 PR #5: https://github.com/dmc0306/gpt-shorts-studio/pull/5 . PR Flutter analyze/test와 보조 워크플로 테스트 모두 성공. 앱 ZIP은 0.21.17+76으로 패키징됨 (commit 194583e2bb28374928a152027a8fd1bb1ecd1ff7). GitHub 자동 커밋에서 원래 빌드 트리거가 보장되지 않으므로 실제 APK 검증은 아래 main의 별도 커밋 후 실행 결과를 확인해야 함.
+
+## 2026-11-04 — v0.21.18+77 Instagram 후보 상태·중앙 짧은 자막 오탐 수정
+사용자 스크린샷: TikTok 후보 영상 중앙에 노란 "feeding" 영문 자막이 존재하고, 앱에서는 Instagram 릴스가 '확인 필요 · 영상 프레임 미검증'으로 나오는 문제. Cloud Vision의 이미지 6장/일치 웹페이지 57/소셜 단서 44/후보 8은 실제 영상 장면 및 자막 검사 성공 수가 아님. 앱의 Instagram 후보는 실제 영상 스트림 자동 다운로드/프레임 비교 미지원이며 이미지 매칭 단서만 제시했음(실영상 검사 2건, 통과 0건). 기존 OverlayCheck는 같은 위치의 3개 서로 다른 시점에 OCR 글자가 반복돼야 걸러지는 편이어서 한 장면의 잠깐 나타나는 영문 자막을 놓칠 수 있었음.
+
+개선: OverlayCheck.verdict는 짧게 나타난 한 장면의 큰 중앙 글자(예: feeding)를 overlay로 판정하고, 소규모 글자 신호도 caption_possible로 구분해 자동 승인 보류. 장면마다 글자 위치가 달라지는 경우도 배제. OCR 결과 없음/불확실한 경우는 자동 통과시키지 않음. Instagram은 unsupported=실제 영상/길이/기존 자막 자동 검사 미지원이라 구체적으로 표시하고, 추적 한도 소진 후보는 unverified로 표시. 별도 '자막 있음 · 제외' 버튼을 추가해 benchState.captioned[videoId] 영구 저장, 다음 연속찾기에서 같은 URL을 제외하고 초기화 가능. 수동 '원본 확인·저장'시 영상 전체 일치, 글자 자막 부재 및 이용 권한 확인을 요구하는 문구 표시. '원본 아님'과 자막 포함은 구별함. 실제 영상 검증을 전혀 하지 않은 URL은 무자막 원본으로 자동 확정하지 않음.
+PR #6 성공: https://github.com/dmc0306/gpt-shorts-studio/pull/6 ; 정적 분석 및 Flutter 테스트 https://github.com/dmc0306/gpt-shorts-studio/actions/runs/41729633400 통과, 기존 OCR/연속찾기 회귀 검증도 성공. 앱 ZIP source 패키징 커밋 e36d08fcb3ffeae933191e6d0487f31764e7c6fd. 실기기에서 영어 자막 OCR 검출 성공률은 별도 실험 필요. 최신 Android APK 전체 빌드 검증은 이어서 기록.
