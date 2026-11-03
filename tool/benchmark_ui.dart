@@ -88,6 +88,10 @@ class _BenchmarkState extends State<BenchmarkScreen>{
  });
  Future<void> search(BenchVideo v,{bool manual=false,bool continuous=false})async{
   if(busy)return;
+  if(!manual&&!v.eligibleForAutoSearch){
+    report('롱폼/긴 영상 제외: ${v.duration}초 · 자동 검색은 60초 이하 영상만 지원해요.');
+    return;
+  }
   if(visionKeyText.text.trim().isEmpty&&keyText.text.trim().isEmpty){
     report('Cloud Vision API 키를 입력해 주세요.');return;
   }
@@ -131,11 +135,11 @@ class _BenchmarkState extends State<BenchmarkScreen>{
       final width=(meta['videoWidth'] as num?)?.toInt();
       final height=(meta['videoHeight'] as num?)?.toInt();
       if(!BenchmarkDuration.isShortGeometry((millis/1000).round(),width,height)){
-        report('유튜브 롱폼/가로 영상 제외 · 세로형 또는 정사각형 180초 이하 영상만 자동 탐색해요.');
+        report('유튜브 롱폼/가로 영상 제외 · 세로형 또는 정사각형 60초 이하만 자동 탐색해요.');
         return;
       }
     }
-    report('OCR를 피해 넓어진 검색 영역 · 길이 ±10%(최소 ±2초) · 롱폼 제외 · 장면 ${previews.length}장');
+    report('한국어+영문 OCR 자막 검사 · 길이 ±10%(최소 ±2초) · 60초 이하 세로형 · 검색 장면 ${previews.length}장');
     final key=visionKeyText.text.trim().isNotEmpty?visionKeyText.text.trim():keyText.text.trim();
     final batches=OneClickExplorer.frameBatches(frames,continuous:continuous);
     final reviewed=<String>{
@@ -145,6 +149,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
     final collected=<String,CandidateCheck>{};
     var totalInspected=0;
     var roundsDone=0;
+    var noDirectEvidenceRounds=0;
     var lastDiagnostic='';
     for(final batch in batches){
       if(cancelled)throw const OneClickCancelled();
@@ -166,10 +171,22 @@ class _BenchmarkState extends State<BenchmarkScreen>{
         reviewed.add(check.origin.url); // do not spend quota on the same candidate again
         collected.putIfAbsent(check.origin.url,()=>check);
       }
+      if(attempt.results.any((c)=>c.origin.source=='이미지 직접일치 후보')){
+        noDirectEvidenceRounds=0;
+      }else{
+        noDirectEvidenceRounds++;
+      }
       // An exact frame + subtitle-screened video match ends the loop, even
       // when its stream cannot be exported to an editor automatically.
       if(attempt.match!=null){
         report('실제 영상 장면 일치 · 연속찾기 자동 종료');
+        break;
+      }
+      // No index evidence across two distinct crops: do not waste another
+      // 4 expensive Cloud Vision requests on essentially the same video.
+      if(continuous&&noDirectEvidenceRounds>=2){
+        lastDiagnostic+=' · 서로 다른 이미지 조합 2회에서 직접 일치 근거가 없어 조기 종료';
+        report('이미지 검색 근거 0 · 반복 검색 조기 종료 · 다른 벤치마킹 쇼츠를 선택해 주세요.');
         break;
       }
     }
@@ -483,12 +500,13 @@ class _BenchmarkState extends State<BenchmarkScreen>{
     ])));
  }
  @override Widget build(BuildContext context){
-  final selected=state.picked;
-  final count=state.top.values.fold<int>(0,(a,v)=>a+v.length);
+  final selected=state.picked.where((v)=>v.eligibleForAutoSearch).toList();
+  final count=state.top.values.fold<int>(0,(a,v)=>
+    a+v.where((item)=>item.eligibleForAutoSearch).length);
   return Scaffold(appBar:AppBar(title:const Text('벤치마킹 쇼츠 탐색')),
    body:loading?const Center(child:CircularProgressIndicator()):
    ListView(padding:const EdgeInsets.all(16),children:[
-    const Text('채널별 상위 50개 → 랜덤 선정 → 주요 장면 역이미지 검색 → 기존 템플릿',style:TextStyle(fontSize:14)),
+    const Text('60초 이하 숏폼 후보만 선정 · 세로형 스트림 확인 · 자막 없는 원본 이미지 검색',style:TextStyle(fontSize:14)),
     const SizedBox(height:12),
     TextField(controller:keyText,obscureText:true,enableSuggestions:false,autocorrect:false,
       decoration:const InputDecoration(labelText:'YouTube Data API v3 키 (암호화 저장)')),
@@ -516,18 +534,18 @@ class _BenchmarkState extends State<BenchmarkScreen>{
      })]),
     for(final c in state.channels.entries.toList())ListTile(dense:true,contentPadding:EdgeInsets.zero,
       title:Text(c.value),
-      subtitle:Text('상위 ${state.top[c.key]?.length??0}개 · 총 ${state.scanned[c.key]??0}개 분석'
+      subtitle:Text('60초 이하 ${state.top[c.key]?.where((v)=>v.eligibleForAutoSearch).length??0}개 · 총 ${state.scanned[c.key]??0}개 분석'
        '${state.complete[c.key]==false?" · 불완전 수집":""}'),
       trailing:IconButton(icon:const Icon(Icons.close),tooltip:'채널 제외',
         onPressed:busy?null:(){setState(()=>state.channels.remove(c.key));save();})),
     FilledButton.icon(onPressed:busy?null:scan,icon:const Icon(Icons.refresh),
-      label:const Text('채널별 조회수 상위 50개 갱신')),
+      label:const Text('60초 이하 영상만 상위 50개 갱신')),
     FilledButton.icon(
       onPressed:busy||count==0?null:()async{
         final pool=<BenchVideo>[];
         for(final key in state.channels.keys){
           for(final video in state.top[key]??<BenchVideo>[]){
-            if(!state.seen.contains(video.id))pool.add(video);
+            if(video.eligibleForAutoSearch&&!state.seen.contains(video.id))pool.add(video);
           }
         }
         if(pool.isEmpty){report('추첨할 새 영상이 없어요. 갱신 후 기존 추첨을 확인하세요.');return;}
