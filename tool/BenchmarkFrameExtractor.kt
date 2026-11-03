@@ -145,18 +145,18 @@ object BenchmarkFrameExtractor {
         val videoWidth=if(rotation%180!=0)rawHeight else rawWidth
         val videoHeight=if(rotation%180!=0)rawWidth else rawHeight
         val scenes=mutableListOf<Map<String,Any>>()
-        val recognizer=BenchmarkOcrCrop.newRecognizer()
+        val recognizers=BenchmarkOcrCrop.newRecognizers()
         try{
-            // Collect up to nine OCR-free scenes for distinct search rounds.
+            // Collect six independently sampled OCR-clean scenes (bounded local cost).
             // Alternate the timeline instead of re-searching identical frames.
             val positions=listOf(0,2,4,6,8,10,1,3,5,7,9,11)
             for(index in positions){
-                if(scenes.size>=9)break
+                if(scenes.size>=6)break
                 val ms=(duration*(index+.5)/12).toLong().coerceIn(0,duration-1)
                 val frame=media.getScaledFrameAtTime(ms*1000,
                     MediaMetadataRetriever.OPTION_CLOSEST,720,960)?:continue
                 try{
-                    val region=BenchmarkOcrCrop.select(frame,recognizer)?:continue
+                    val region=BenchmarkOcrCrop.select(frame,recognizers)?:continue
                     val clean=Bitmap.createBitmap(frame,region.x,region.y,region.w,region.h)
                     try{
                         val croppedBuffer=ByteArrayOutputStream()
@@ -174,7 +174,7 @@ object BenchmarkFrameExtractor {
                     }finally{clean.recycle()}
                 }finally{frame.recycle()}
             }
-        }finally{recognizer.close()}
+        }finally{recognizers.forEach{it.close()}}
         check(scenes.size>=3){"자막과 겹치지 않는 장면이 ${scenes.size}장뿐이에요. 최소 3장 이상 필요해요."}
         return scenes
     }
