@@ -23,7 +23,6 @@ class _BenchmarkState extends State<BenchmarkScreen>{
  BenchState state=BenchState();
  String message='';
  final framePreviews=<String,List<Uint8List>>{};
- final fullFramePreviews=<String,List<Uint8List>>{};
  bool busy=false,loading=true;
  String? activeVideoId;
  bool cancelled=false;
@@ -110,18 +109,15 @@ class _BenchmarkState extends State<BenchmarkScreen>{
       }
     }
     if(frames==null||frames.isEmpty){report('영상 프레임 추출 실패');return;}
-    final previews=<Uint8List>[],uncropped=<Uint8List>[];
+    final previews=<Uint8List>[];
     for(final frame in frames){
       if(frame is Map&&frame['content'] is String){
         previews.add(base64Decode(frame['content'] as String));
-        final uncroppedBytes=frame['originalContent'];
-        uncropped.add(uncroppedBytes is String?
-          base64Decode(uncroppedBytes):base64Decode(frame['content'] as String));
+
       }
     }
     if(mounted)setState((){
       framePreviews[v.id]=previews;
-      fullFramePreviews[v.id]=uncropped;
     });
     if(!manual&&frames.first is Map){
       final meta=frames.first as Map;
@@ -240,9 +236,9 @@ class _BenchmarkState extends State<BenchmarkScreen>{
   }
  }
  Future<void> shareFrameToLens(BenchVideo v,int index)async{
-   final originals=fullFramePreviews[v.id];
-   final crops=framePreviews[v.id];
-   final frames=(originals!=null&&index<originals.length)?originals:crops;
+   // Lens gets exactly the same OCR-screened crop as Cloud Vision.
+   // Never substitute the uncropped video frame containing added captions.
+   final frames=framePreviews[v.id];
    if(frames==null||index>=frames.length)return;
    try{
      await Native.call('benchmarkShareFrame',
@@ -355,7 +351,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
          label:Text(cancelled?'중단 처리 중':'검색 중단'))),
      ],
      if(framePreviews[v.id]?.isNotEmpty==true)...[
-       const Text('OCR로 자막 위치를 피해서 추출한 장면 · 사진을 누르면 전체 프레임을 이미지 검색 앱으로 공유',style:TextStyle(fontSize:12,fontWeight:FontWeight.bold)),
+       const Text('자막 재검증을 통과한 검색용 장면 · 사진을 누르면 같은 크롭을 이미지 검색 앱으로 공유',style:TextStyle(fontSize:12,fontWeight:FontWeight.bold)),
        const SizedBox(height:6),
        SizedBox(height:124,child:ListView.separated(
          scrollDirection:Axis.horizontal,
@@ -370,7 +366,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
                child:Icon(Icons.image_search,color:Colors.white,size:24)),
            ])))),
        const SizedBox(height:4),
-       const Text('프레임을 터치해 Google Lens 등으로 검색하세요. 검색 앱에서 인물·물체만 선택하면 추가 자막을 피할 수 있어요. 검색 결과 확인은 수동입니다.',
+       const Text('프레임을 터치하면 화면에 표시된 OCR 검증 크롭 그대로 Google Lens 등에 공유해요. 원본 전체 화면이나 추가 자막은 다시 붙이지 않아요. OCR 누락은 여전히 가능해요.',
           style:TextStyle(fontSize:12)),
        const SizedBox(height:8),
      ],
