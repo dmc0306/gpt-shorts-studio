@@ -1,0 +1,26 @@
+name: Apply strict short-only dual OCR patch
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/apply-fast-short-only.yml'
+      - 'tool/patch_fast_short_only.py'
+permissions:
+  contents: write
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Update versioned source ZIP
+        run: python3 tool/patch_fast_short_only.py
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add shorts-studio-source.zip
+          git diff --cached --quiet && { echo "No update"; exit 0; }
+          git commit -m "Package v0.21.19 strict short-only fast OCR"
+          git push
