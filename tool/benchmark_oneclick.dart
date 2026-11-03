@@ -128,27 +128,52 @@ class VideoMatch {
     m.matched>=3&&m.distinctCandidate>=3&&m.best<=5;
 }
 
-/// ML Kit OCR bounding boxes only; repeated top/bottom text across sampled
-/// times is treated conservatively as a possible creator-added overlay.
+/// OCR is a screening signal, not proof that the entire clip is caption-free.
+/// Short-lived creator captions may appear in only one sampled scene.
 class OverlayCheck {
-  static bool suspicious(Map<dynamic,dynamic> ocr){
+  /// 'overlay' = repeated or highly prominent subtitle-like text.
+  /// 'possible' = OCR evidence of text, but could be writing in the scene.
+  /// 'unknown' = scanner failure; no automatic approval.
+  /// 'clean' = no text evidence in the examined frames, not a guarantee.
+  static String verdict(Map<dynamic,dynamic> ocr){
     final lines=ocr['lines'];
-    if(lines is! List)return true; // Scanner failure must not pass as clean.
-    final cells=<int,Set<int>>{};
+    if(lines is! List)return 'unknown';
+    final moments=<int>{};
+    final positions=<int,Set<int>>{};
+    var anyText=false,centralProminent=false;
     for(final raw in lines){
       if(raw is! Map)continue;
-      if(raw['watermark']==true)continue;
-      final y=(raw['y'] as num? ?? 0).toDouble(),x=(raw['x'] as num? ?? 0).toDouble();
+      final y=(raw['y'] as num? ?? 0).toDouble();
+      final x=(raw['x'] as num? ?? 0).toDouble();
       final width=(raw['w'] as num? ?? 0).toDouble();
       final letters=(raw['letters'] as num? ?? 0).toInt();
-      final time=(raw['time'] as num? ?? -1).toDouble();
-      if(letters<3||width<.18||time<0)continue;
-      if(y<.08||y>.94)continue; // Include creator-added middle captions.
-      final key=((y*12).round()*20)+(x*4).round();
-      cells.putIfAbsent(key,()=>{}).add(time.floor());
+      final seconds=(raw['time'] as num? ?? -1).toDouble();
+      if(seconds<0||letters<3||width<.14||y<.07||y>.95)continue;
+      // Ignore only tiny edge watermarks; center text must not be discarded
+      // just because a recognizer classified the block as a watermark.
+      if(raw['watermark']==true&&width<.19&&
+         (x<.12||x>.78)&&(y<.14||y>.86))continue;
+      anyText=true;
+      final center=x+width/2;
+      final subtitleRegion=y>=.16&&y<=.87&&center>=.16&&center<=.84;
+      if(!subtitleRegion)continue;
+      final second=seconds.floor();
+      moments.add(second);
+      final cell=((y*10).round()*20)+(x*4).round();
+      positions.putIfAbsent(cell,()=>{}).add(second);
+      // A large short-lived central word, e.g. "feeding", is itself
+      // visible pre-existing subtitle evidence.
+      if(letters>=5&&width>=.22&&y>=.20&&y<=.82){
+        centralProminent=true;
+      }
     }
-    return cells.values.any((times)=>times.length>=3);
+    if(centralProminent||moments.length>=2||
+       positions.values.any((times)=>times.length>=2)){
+      return 'overlay';
+    }
+    return anyText?'possible':'clean';
   }
+  static bool suspicious(Map<dynamic,dynamic> ocr)=>verdict(ocr)!='clean';
 }
 
 /// YouTube thumbnail is an inexpensive *hint* when candidate stream decoding
@@ -341,8 +366,14 @@ class OneClickExplorer {
       if(raw['text'] is! Map){
         return CandidateCheck(origin,'error','장면은 일치했지만 기존 자막 검사에 실패해 보류합니다.');
       }
-      if(OverlayCheck.suspicious(raw['text'] as Map)){
-        return CandidateCheck(origin,'overlay','영상은 일치하지만 기존 자막·상단 제목이 의심돼 제외합니다.');
+      final textStatus=OverlayCheck.verdict(raw['text'] as Map);
+      if(textStatus=='overlay'){
+        return CandidateCheck(origin,'overlay',
+          '영상 장면은 일치하지만 기존 자막/화면 글자 감지 · 무자막 원본으로 자동 승인하지 않음');
+      }
+      if(textStatus!='clean'){
+        return CandidateCheck(origin,'caption_possible',
+          '영상 장면은 일치하지만 일부 글자 감지 또는 OCR 불확실 · 직접 영상 확인 필요');
       }
       retainDownloaded=true;
       return CandidateCheck(origin,'checked',
@@ -419,7 +450,12 @@ class OneClickExplorer {
         continue;
       }
       final candidateYoutubeId=youtubeId(origin.url);
-      if(candidateYoutubeId==null&&tiktokUrl(origin.url)==null)continue;
+      if(candidateYoutubeId==null&&tiktokUrl(origin.url)==null){
+        final host=Uri.tryParse(origin.url)?.host??'외부 서비스';
+        results.add(CandidateCheck(origin,'unsupported',
+          '$host 게시물의 이미지 일치 근거만 확보 · 실제 동영상 스트림/영상 길이/기존 자막은 검사하지 못했음 · 무자막 원본으로 확정 불가'));
+        continue;
+      }
       if(candidateYoutubeId!=null){
         final duration=lengths[candidateYoutubeId];
         if(duration!=null&&!BenchmarkDuration.isShort(duration)){
@@ -472,19 +508,22 @@ class OneClickExplorer {
     }
     for(final origin in discovered){
       if(results.any((c)=>c.origin.url==origin.url))continue;
-      results.add(CandidateCheck(origin,'unverified','영상 프레임 미검증 · 관련 페이지라는 사실만 확인됨'));
+      results.add(CandidateCheck(origin,'unverified',
+        '검색 후보는 발견했지만 이번 검색의 검증 시간/횟수 한도에 도달 · 실제 영상과 자막 미확인'));
     }
     _check();
     report('3/3 · 실제 영상 대조 결과 정리 중');
     results.sort((a,b){
       int weight(String s)=>switch(s){
-        'checked'=>0,'overlay'=>1,'duration'=>2,'longform'=>3,'unverified'=>4,
-        'weak'=>7,'unsupported'=>5,_=>6};
+        'checked'=>0,'overlay'=>1,'caption_possible'=>2,'duration'=>3,
+        'longform'=>4,'unsupported'=>5,'unverified'=>6,'weak'=>8,_=>7};
       return weight(a.status).compareTo(weight(b.status));
     });
     final verified=results.where((r)=>r.status=='checked').length;
     final rejected=results.where((r)=>r.status=='unrelated').length;
     final overlay=results.where((r)=>r.status=='overlay').length;
+    final captionPossible=results.where((r)=>r.status=='caption_possible').length;
+    final unsupported=results.where((r)=>r.status=='unsupported').length;
     final failures=results.where((r)=>r.status=='error').length;
     final durationSkipped=results.where((r)=>r.status=='duration').length;
     final longformSkipped=results.where((r)=>r.status=='longform').length;
@@ -493,7 +532,9 @@ class OneClickExplorer {
     final diagnostic='${discovery.diagnostic} 직접 이미지 일치 후보 $directLeads건 · '
       '단순 관련 페이지 $weakLeads건(자동 확인 제외) · 실제 영상 검사 $checked건 · '
       '장면·자막 검증 통과 $verified건 · 불일치 $rejected건 · '
-      '자막 의심 $overlay건 · 길이 불일치/미확인 $durationSkipped건 · 롱폼/가로 영상 제외 $longformSkipped건 · 처리 실패 $failures건.';
+      '기존 자막 감지 $overlay건 · 글자 감지/확인 보류 $captionPossible건 · '
+      '플랫폼 영상 검사 미지원 $unsupported건 · 길이 불일치/미확인 $durationSkipped건 · '
+      '롱폼/가로 영상 제외 $longformSkipped건 · 처리 실패 $failures건.';
     report(diagnostic);
     return OneClickResult(results,total:discovered.length,inspected:checked,
       diagnostic:diagnostic);
