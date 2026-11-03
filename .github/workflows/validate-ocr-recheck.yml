@@ -1,0 +1,39 @@
+name: Validate OCR crop and Lens sharing
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tool/BenchmarkOcrCrop.kt'
+      - 'tool/BenchmarkFrameExtractor.kt'
+      - 'tool/benchmark_ui.dart'
+      - 'tool/patch_ocr_recheck.py'
+      - '.github/workflows/validate-ocr-recheck.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch source ZIP
+        run: |
+          python3 tool/patch_ocr_recheck.py
+          unzip -q shorts-studio-source.zip -d app
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Bootstrap dependencies
+        working-directory: app
+        run: python3 tool/bootstrap.py
+      - name: Flutter analysis
+        working-directory: app
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Flutter tests
+        working-directory: app
+        run: flutter test
