@@ -21,28 +21,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Patch source ZIP on isolated PR copy
         run: |
-          if unzip -p shorts-studio-source.zip pubspec.yaml | grep -q '^version: 0.21.15+74
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-      - name: Bootstrap
-        working-directory: app
-        run: python3 tool/bootstrap.py
-      - name: Static analysis
-        working-directory: app
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings
-      - name: Unit and widget tests
-        working-directory: app
-        run: flutter test
-; then
+          if unzip -p shorts-studio-source.zip pubspec.yaml | grep -q '^version: 0.21.15+74$'; then
             python3 tool/patch_continuous_search.py
           else
-            echo "Already on a later application version; validate current source without reapplying old patch."
+            echo "Already on a later app version; skip old packaging."
           fi
           unzip -q shorts-studio-source.zip -d app
       - uses: actions/setup-java@v4
