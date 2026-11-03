@@ -253,9 +253,9 @@ class OneClickExplorer {
     return batches;
   }
 
-  static const maxVerifications=5;
-  static const maxSearch=Duration(minutes:3);
-  static const perCandidateLimit=Duration(seconds:95);
+  static const maxVerifications=3;
+  static const maxSearch=Duration(seconds:120);
+  static const perCandidateLimit=Duration(seconds:70);
   bool _cancelled=false;
   BenchmarkStreamResolver? _activeResolver;
   TikTokDownloader? _activeTikTok;
@@ -352,7 +352,7 @@ class OneClickExplorer {
       final height=(info?['videoHeight'] as num?)?.toInt();
       if(!BenchmarkDuration.isShortGeometry(actualSec,width,height)){
         return CandidateCheck(origin,'longform',
-          '롱폼/가로 영상 제외 · ${actualSec}초 · 해상도 ${width??'?'}×${height??'?'} · 세로형 또는 정사각형 최대 180초만 허용');
+          '롱폼/가로 영상 제외 · ${actualSec}초 · 해상도 ${width??'?'}×${height??'?'} · 자동 검증은 60초 이하 세로형만 허용');
       }
       if(benchmarkSeconds>0&&!BenchmarkDuration.similar(benchmarkSeconds,actualSec)){
         return CandidateCheck(origin,'duration',
@@ -460,7 +460,7 @@ class OneClickExplorer {
         final duration=lengths[candidateYoutubeId];
         if(duration!=null&&!BenchmarkDuration.isShort(duration)){
           results.add(CandidateCheck(origin,'longform',
-            'YouTube 롱폼 제외 · ${duration}초 · 최대 180초만 검사'));
+            'YouTube 긴 영상 제외 · ${duration}초 · 자동 탐색은 60초 이하만'));
           continue;
         }
         if(duration==null){
@@ -489,7 +489,7 @@ class OneClickExplorer {
           _activeResolver?.cancel();
           _activeTikTok?.cancel();
           Native.call('cancelTextScan');
-          return CandidateCheck(origin,'error','개별 후보 95초 제한 초과 · 다음 후보로 진행');
+          return CandidateCheck(origin,'error','개별 후보 70초 제한 초과 · 다음 후보로 진행');
         });
       _check();
       if(verdict.status!='checked'&&verdict.clip!=null){

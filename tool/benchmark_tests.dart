@@ -283,8 +283,9 @@ void main(){
    expect(BenchmarkDuration.similar(42,48),false);
    expect(BenchmarkDuration.similar(8,6),true);
    expect(BenchmarkDuration.similar(8,5),false);
-   expect(BenchmarkDuration.isShort(180),true);
-   expect(BenchmarkDuration.isShort(181),false);
+   expect(BenchmarkDuration.isShort(60),true);
+   expect(BenchmarkDuration.isShort(61),false);
+   expect(BenchmarkDuration.isShort(180),false);
    expect(BenchmarkDuration.isShortGeometry(42,1080,1920),true);
    expect(BenchmarkDuration.isShortGeometry(42,1080,1080),true);
    expect(BenchmarkDuration.isShortGeometry(42,1920,1080),false);
@@ -292,6 +293,23 @@ void main(){
    expect(BenchmarkDuration.isShortGeometry(40,null,null),false);
    expect(BenchmarkDuration.label(42,null),contains('확인 불가'));
    expect(BenchmarkDuration.label(42,60),contains('길이 불일치'));
+ });
+ test('Strict short-video filter rejects old cached 61–180 second longform candidates',(){
+   const portraitClip=BenchVideo('ABCDEFGHIJK','channel','channel','short','',123,50,'2026-10-25');
+   const longClip=BenchVideo('ZYXWVUTSRQP','channel','channel','long','',456,130,'2026-10-25');
+   expect(portraitClip.eligibleForAutoSearch,true);
+   expect(longClip.eligibleForAutoSearch,false);
+   expect(BenchVideo.maxAutoSeconds,60);
+   final state=BenchState();
+   state.top['channel']=[longClip,portraitClip];
+   state.channels..clear()..['channel']='channel';
+   state.draw();
+   expect(state.selected,['ABCDEFGHIJK']);
+ });
+ test('Landscape Shorts are excluded even when under 60 seconds',(){
+   expect(BenchmarkDuration.isShortGeometry(45,1920,1080),false);
+   expect(BenchmarkDuration.isShortGeometry(45,1080,1920),true);
+   expect(BenchmarkDuration.isShortGeometry(130,1080,1920),false);
  });
  test('Several crop hits at one timestamp count as one candidate scene',(){
    final reference=[

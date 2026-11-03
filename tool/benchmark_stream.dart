@@ -15,24 +15,26 @@ class BenchmarkStreamResolver {
   bool _cancelled=false;
   void cancel(){_cancelled=true;_youtube.close();}
   void _check(){if(_cancelled)throw const BenchmarkStreamError('사용자가 스트림 검색을 중단했어요.');}
-  static const maxBytes=80*1024*1024;
+  static const maxBytes=35*1024*1024;
 
   static VideoOnlyStreamInfo choose(List<VideoOnlyStreamInfo> streams) {
     final playable=streams.where((s)=>
       s.container==StreamContainer.mp4 &&
       s.videoCodec.toLowerCase().startsWith('avc1') &&
       (s.size.totalBytes<=0||s.size.totalBytes<=maxBytes) &&
-      s.videoResolution.height>=240
+      s.videoResolution.height>=240 &&
+      s.videoResolution.width>0 &&
+      s.videoResolution.width<=s.videoResolution.height
     ).toList();
     if(playable.isEmpty)throw const BenchmarkStreamError(
-      '디코딩 가능한 MP4(H.264) 스트림을 찾지 못했어요. 기존 영상 파일 선택을 사용해 주세요.');
+      '세로형 숏폼 MP4(H.264) 스트림이 없어요. 가로형 롱폼은 탐색하지 않습니다.');
     playable.sort((a,b) {
-      // Long edge <= 1280 is preferred; additional resolution brings little
-      // benefit to 720px JPEG frames but increases traffic and latency.
+      // 720 px long edge is generally enough to find scene fingerprints.
+      // Avoid 1080/1920 px streams when a smaller portrait stream exists.
       int rank(VideoOnlyStreamInfo s) {
         final longEdge=s.videoResolution.height>s.videoResolution.width
           ?s.videoResolution.height:s.videoResolution.width;
-        return longEdge<=1280?100000+longEdge:100000-(longEdge-1280);
+        return 10000-(longEdge-720).abs();
       }
       return rank(b).compareTo(rank(a));
     });
@@ -48,13 +50,13 @@ class BenchmarkStreamResolver {
       throw const BenchmarkStreamError('임시 영상 저장 경로가 올바르지 않아요.');
     }
     RandomAccessFile? handle;
-    final deadline=Timer(const Duration(seconds:85),cancel);
+    final deadline=Timer(const Duration(seconds:60),cancel);
     final file=File(output),partial=File('$output.part');
     try {
       _check();
       status('영상 스트림 형식 확인 중');
       final manifest=await _youtube.videos.streams.getManifest(videoId)
-        .timeout(const Duration(seconds:35));
+        .timeout(const Duration(seconds:24));
       _check();
       final selected=choose(manifest.videoOnly);
       final resolution=selected.videoResolution;
@@ -63,10 +65,10 @@ class BenchmarkStreamResolver {
       handle=await partial.open(mode:FileMode.write);
       var bytes=0;
       await for(final chunk in _youtube.videos.streams.get(selected)
-          .timeout(const Duration(seconds:45))) {
+          .timeout(const Duration(seconds:35))) {
         _check();
         bytes+=chunk.length;
-        if(bytes>maxBytes)throw const BenchmarkStreamError('프레임 탐색용 영상 80MB 제한을 넘었어요.');
+        if(bytes>maxBytes)throw const BenchmarkStreamError('프레임 탐색용 영상 35MB 제한을 넘었어요.');
         await handle.writeFrom(chunk);
       }
       _check();
@@ -79,7 +81,7 @@ class BenchmarkStreamResolver {
     } on BenchmarkStreamError {
       rethrow;
     } catch (_) {
-      if(_cancelled)throw const BenchmarkStreamError('스트림 연결이 취소되었거나 85초 제한을 초과했어요.');
+      if(_cancelled)throw const BenchmarkStreamError('스트림 연결이 취소되었거나 60초 제한을 초과했어요.');
       throw const BenchmarkStreamError(
         'YouTube 영상 스트림을 받지 못했어요. 일부 영상의 재생 검증 또는 접속 제한 때문일 수 있어요. 직접 파일 선택으로 재시도해 주세요.');
     } finally {
