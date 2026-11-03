@@ -163,17 +163,13 @@ object BenchmarkFrameExtractor {
                         check(clean.compress(Bitmap.CompressFormat.JPEG,87,croppedBuffer))
                         val cropped=croppedBuffer.toByteArray()
                         if(cropped.size !in 100..1000000)continue
-                        val fullBuffer=ByteArrayOutputStream()
-                        check(frame.compress(Bitmap.CompressFormat.JPEG,82,fullBuffer))
-                        val full=fullBuffer.toByteArray()
                         val hash=perceptualHash(clean)
                         scenes.add(mapOf("timeMs" to ms,"durationMs" to duration,
                             "videoWidth" to videoWidth,"videoHeight" to videoHeight,
-                            "ocrExcluded" to true,"ocrTextBoxes" to region.detected,
+                            "ocrExcluded" to true,"ocrRechecked" to true,
+                            "ocrTextBoxes" to region.detected,
                             "bounds" to region.normalized(frame.width,frame.height),
                             "content" to Base64.encodeToString(cropped,Base64.NO_WRAP),
-                            "originalContent" to Base64.encodeToString(
-                                if(full.size<=1000000)full else cropped,Base64.NO_WRAP),
                             "hash" to hash.first,"contrast" to hash.second))
                     }finally{clean.recycle()}
                 }finally{frame.recycle()}
