@@ -19,7 +19,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Package candidate-caption guard to disposable app
         run: |
-          python3 tool/patch_caption_verification.py
+          if unzip -p shorts-studio-source.zip pubspec.yaml | grep -Fq 'version: 0.21.17+76'; then
+            python3 tool/patch_caption_verification.py
+          else
+            echo "Caption verification already included in the versioned app"
+          fi
           unzip -q shorts-studio-source.zip -d app
       - uses: actions/setup-java@v4
         with:
