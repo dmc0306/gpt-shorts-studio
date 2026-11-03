@@ -21,7 +21,21 @@ jobs:
         with:
           persist-credentials: true
       - name: Package updated Android source
-        run: python3 tool/patch_continuous_search.py
+        run: |
+          if unzip -p shorts-studio-source.zip pubspec.yaml | grep -q '^version: 0.21.15+74
+      - name: Commit source ZIP
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add shorts-studio-source.zip
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Package v0.21.16 continuous original search"
+          git push
+; then
+            python3 tool/patch_continuous_search.py
+          else
+            echo "Continuous-search patch already integrated; skip old version-specific patch."
+          fi
       - name: Commit source ZIP
         run: |
           git config user.name "github-actions[bot]"
