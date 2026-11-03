@@ -21,7 +21,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Patch source ZIP on isolated PR copy
         run: |
-          python3 tool/patch_continuous_search.py
+          if unzip -p shorts-studio-source.zip pubspec.yaml | grep -q '^version: 0.21.15+74$'; then
+            python3 tool/patch_continuous_search.py
+          else
+            echo "Already on a later app version; skip old packaging."
+          fi
           unzip -q shorts-studio-source.zip -d app
       - uses: actions/setup-java@v4
         with:
