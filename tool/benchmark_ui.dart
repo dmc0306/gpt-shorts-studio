@@ -132,7 +132,10 @@ class _BenchmarkState extends State<BenchmarkScreen>{
     report('OCR를 피해 넓어진 검색 영역 · 길이 ±10%(최소 ±2초) · 롱폼 제외 · 장면 ${previews.length}장');
     final key=visionKeyText.text.trim().isNotEmpty?visionKeyText.text.trim():keyText.text.trim();
     final batches=OneClickExplorer.frameBatches(frames,continuous:continuous);
-    final reviewed=<String>{...(state.rejected[v.id]??<String>{})};
+    final reviewed=<String>{
+      ...(state.rejected[v.id]??<String>{}),
+      ...(state.captioned[v.id]??<String>{}),
+    };
     final collected=<String,CandidateCheck>{};
     var totalInspected=0;
     var roundsDone=0;
@@ -176,17 +179,22 @@ class _BenchmarkState extends State<BenchmarkScreen>{
     for(final item in result.results){
       final prefix=switch(item.status){
         'checked'=>'검증됨 · 자막 의심 미검출',
-        'overlay'=>'제외 · 기존 자막 의심',
+        'overlay'=>'자막 있음 · 기존 편집 글자 감지',
+        'caption_possible'=>'확인 보류 · 화면 글자 감지',
         'unrelated'=>'제외 · 실제 영상 불일치',
         'duration'=>'제외 · 영상 길이 불일치 또는 확인 불가',
         'longform'=>'제외 · 유튜브 롱폼/가로 영상',
-        'weak'=>'단순 관련 페이지 · 자동 검증 대상 아님',
-        'unsupported'=>'확인 필요 · 플랫폼 미지원',
-        'error'=>'확인 실패',_=>'확인 필요'
+        'weak'=>'관련 페이지 참고용 · 영상 미검증',
+        'unsupported'=>'실제 영상 확인 필요 · 자동 검사 미지원',
+        'unverified'=>'실제 영상 확인 필요 · 검사 한도 초과',
+        'error'=>'영상 검사 실패 · 원본 여부 미확인',_=>'확인 필요'
       };
       visible.add(BenchOrigin(item.origin.url,'$prefix · ${item.detail}',
         item.status=='checked'?'실제 동영상 교차확인':
-        item.status=='weak'?'연관 페이지만 확인':'검증되지 않은 검색 후보'));
+        item.status=='weak'?'연관 페이지만 확인':
+        item.status=='overlay'?'자막 검출 후보':
+        item.status=='caption_possible'?'자막 확인 필요 후보':
+        '실제 영상 미검증 후보'));
     }
     // Preserve user-supplied original links across future image searches.
     final manualSources=(state.origins[v.id]??<BenchOrigin>[])
@@ -317,12 +325,14 @@ class _BenchmarkState extends State<BenchmarkScreen>{
  Widget candidateCard(BenchVideo v){
    final userOriginal=state.confirmed[v.id];
    final dismissed=state.rejected[v.id]??const <String>{};
+   final captioned=state.captioned[v.id]??const <String>{};
+   final hidden=<String>{...dismissed,...captioned};
    final other=state.origins[v.id]??<BenchOrigin>[];
    final list=<BenchOrigin>[
      if(userOriginal!=null)BenchOrigin(userOriginal,
        '사용자가 원본이라고 제공한 링크 · 자동 이미지 검색의 발견 성과로 계산하지 않음',
        '사용자 제공 원본'),
-     ...other.where((x)=>x.url!=userOriginal&&!dismissed.contains(x.url))
+     ...other.where((x)=>x.url!=userOriginal&&!hidden.contains(x.url))
    ];
    final selected=state.chosen[v.id];
    final canCreate=selected!=null&&!busy;
@@ -374,6 +384,15 @@ class _BenchmarkState extends State<BenchmarkScreen>{
        Padding(padding:const EdgeInsets.symmetric(vertical:8),
          child:SelectableText('마지막 원본 탐색 진단: ${state.diagnostics[v.id]}',
             style:const TextStyle(fontSize:12))),
+     if(captioned.isNotEmpty)Align(alignment:Alignment.centerLeft,
+       child:TextButton.icon(
+         onPressed:busy?null:()async{
+           setState(()=>state.captioned.remove(v.id));
+           await save();
+           report('자막이 있는 것으로 제외했던 ${captioned.length}건의 링크를 다시 검색할 수 있어요.');
+         },
+         icon:const Icon(Icons.undo,size:16),
+         label:Text('자막 있음으로 제외한 ${captioned.length}건 초기화'))),
      if(dismissed.isNotEmpty)Align(alignment:Alignment.centerLeft,
        child:TextButton.icon(
          onPressed:busy?null:()async{
@@ -390,7 +409,9 @@ class _BenchmarkState extends State<BenchmarkScreen>{
       title:Text('${x.source}: ${x.url}',maxLines:2,overflow:TextOverflow.ellipsis),
       subtitle:Text(x.evidence,style:const TextStyle(fontSize:12)),
       value:x.url,groupValue:selected,
-      onChanged:busy||x.source=='검증되지 않은 검색 후보'||
+      onChanged:busy||x.source=='실제 영상 미검증 후보'||
+          x.source=='자막 검출 후보'||
+          x.source=='자막 확인 필요 후보'||
           x.source=='연관 페이지만 확인'?null:(u){
         setState(()=>state.chosen[v.id]=u!);save();}),
      Padding(padding:const EdgeInsets.only(left:32,bottom:8),
@@ -411,22 +432,36 @@ class _BenchmarkState extends State<BenchmarkScreen>{
            },icon:const Icon(Icons.block,size:16),
              label:const Text('원본 아님')),
            TextButton.icon(onPressed:busy?null:()async{
+             setState((){
+               state.captioned.putIfAbsent(v.id,()=> <String>{}).add(x.url);
+               state.origins[v.id]?.removeWhere((o)=>o.url==x.url);
+               if(state.chosen[v.id]==x.url)state.chosen.remove(v.id);
+               if(state.confirmed[v.id]==x.url)state.confirmed.remove(v.id);
+             });
+             await save();
+             report('기존 자막이 포함된 후보로 제외했어요. 이후 검색에서는 이 링크를 건너뛰어요.');
+           },icon:const Icon(Icons.closed_caption_disabled,size:16),
+             label:const Text('자막 있음 · 제외')),
+           TextButton.icon(onPressed:busy?null:()async{
              final confirmed=await showDialog<bool>(context:context,
                builder:(ctx)=>AlertDialog(
-                 title:const Text('이 게시물을 원본으로 확인했나요?'),
-                 content:Text('이 링크를 사용자 확인 원본으로 저장합니다. '
-                     '자동 검색이 찾은 원본이라고 계산하지 않아요.\\n\\n${x.url}'),
+                 title:const Text('자막 없는 실제 원본을 확인했나요?'),
+                 content:Text('검색 결과가 유사하다는 것만으로는 확인할 수 없어요. '
+                     '영상 전체의 장면이 일치하고, 이미 입혀진 제목·단어 자막이 없으며 '
+                     '사용 권한도 직접 확인했을 때만 저장하세요. '
+                     '이 확인은 자동 검증 성공으로 집계하지 않습니다.\\n\\n${x.url}'),
                  actions:[
                    TextButton(onPressed:()=>Navigator.pop(ctx,false),
                      child:const Text('취소')),
                    FilledButton(onPressed:()=>Navigator.pop(ctx,true),
-                     child:const Text('원본으로 저장')),
+                     child:const Text('확인 후 저장')),
                  ]));
              if(confirmed!=true||!mounted)return;
              setState((){
                state.confirmed[v.id]=x.url;
                state.chosen[v.id]=x.url;
                state.rejected[v.id]?.remove(x.url);
+               state.captioned[v.id]?.remove(x.url);
              });
              await save();
              report('사용자가 확인한 원본으로 보존했어요. 다음 검색으로 삭제되지 않아요.');
@@ -463,7 +498,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
        await Native.call('saveBenchmarkVisionKey',{'key':visionKeyText.text.trim()});
        report('Vision 검색 키를 암호화 저장했어요.');
      }),child:const Text('Vision API 키 저장')),
-    const Text('원클릭으로 영상 스트림 → 6개 프레임 → 역이미지 후보 → 최대 5개 실제 동영상 비교·자막 검사 → 확인된 TikTok 원본은 기존 편집기로 연결합니다. Instagram 및 자동 검증 실패는 수동 확인이 필요해요.',
+    const Text('역이미지 검색으로 찾은 Instagram 등은 실제 영상/자막 자동 검증이 아니라 후보 링크입니다. YouTube·TikTok 영상은 접근 가능한 경우에만 장면과 자막을 검사하며, 자막 의심 후보는 자동 제작에서 제외합니다.',
       style:TextStyle(fontSize:12)),
     Text('채널 ${state.channels.length}개 · 순위 후보 $count개',style:const TextStyle(fontWeight:FontWeight.bold)),
     Row(children:[
