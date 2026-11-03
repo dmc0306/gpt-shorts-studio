@@ -198,14 +198,34 @@ void main(){
        {'x':.12,'y':.81,'w':.56,'letters':7,'time':t,'watermark':false}
    ]};
    expect(OverlayCheck.suspicious(overlay),true);
-   expect(OverlayCheck.suspicious({'lines':[
+   expect(OverlayCheck.verdict({'lines':[
      {'x':.2,'y':.43,'w':.3,'letters':6,'time':1},
-   ]}),false);
+   ]}),'overlay'); // A brief central 'feeding'-like subtitle is sufficient.
    expect(OverlayCheck.suspicious({}),true);
    expect(OverlayCheck.suspicious({'lines':[
      for(final t in [1,2,3])
        {'x':.2,'y':.46,'w':.61,'letters':9,'time':t,'watermark':false},
    ]}),true);
+ });
+ test('Short lived caption, changing subtitle positions, and OCR uncertainty',(){
+   expect(OverlayCheck.verdict({'lines':[
+     {'x':.31,'y':.44,'w':.29,'letters':7,'time':11,'watermark':true}
+   ]}),'overlay');
+   expect(OverlayCheck.verdict({'lines':[
+     {'x':.23,'y':.39,'w':.19,'letters':3,'time':1},
+     {'x':.31,'y':.49,'w':.19,'letters':3,'time':3}
+   ]}),'overlay'); // Moving caption also blocks automatic approval.
+   expect(OverlayCheck.verdict({'lines':[
+     {'x':.32,'y':.48,'w':.17,'letters':4,'time':2}
+   ]}),'possible');
+   expect(OverlayCheck.suspicious({'lines':[
+     {'x':.32,'y':.48,'w':.17,'letters':4,'time':2}
+   ]}),true);
+   expect(OverlayCheck.verdict({'lines':[
+     {'x':.01,'y':.03,'w':.17,'letters':8,'time':1,'watermark':true}
+   ]}),'clean');
+   expect(OverlayCheck.verdict({'lines':[]}), 'clean');
+   expect(OverlayCheck.verdict({}), 'unknown');
  });
  test('YouTube original candidate links are strictly video IDs',(){
    expect(OneClickExplorer.youtubeId('https://www.youtube.com/shorts/AbcDefGhI12'),'AbcDefGhI12');
@@ -368,6 +388,21 @@ void main(){
    ],continuous:true);
    expect(rounds.length,1);
    expect(rounds.single.length,3);
+ });
+ test('Captioned links persist separately and are not accepted as clean sources',(){
+   final state=BenchState();
+   state.captioned['AbcDefGhI12']={
+     'https://www.instagram.com/reel/Dp123abc/',
+     'https://www.tiktok.com/@user/video/12345',
+   };
+   state.rejected['AbcDefGhI12']={
+     'https://www.youtube.com/watch?v=12345678901'
+   };
+   final restored=BenchState.fromJson(state.toJson());
+   expect(restored.captioned['AbcDefGhI12']!.length,2);
+   expect(restored.rejected['AbcDefGhI12']!.length,1);
+   restored.captioned.remove('AbcDefGhI12');
+   expect(restored.rejected['AbcDefGhI12'],isNotEmpty);
  });
  test('Rejected links persist per benchmark and can be cleared',(){
    final state=BenchState();
