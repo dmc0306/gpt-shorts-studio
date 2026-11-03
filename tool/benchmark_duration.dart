@@ -7,7 +7,8 @@ class BenchmarkDuration {
   // A small absolute allowance handles platform rounding and short clips.
   // A 42-second reference now accepts 37–47 seconds, rather than 33–51 seconds.
   static int tolerance(int seconds)=>max(2,(seconds*.10).ceil());
-  static bool isShort(int seconds)=>seconds>0&&seconds<=180;
+  static bool isShort(int seconds)=>seconds>0&&seconds<=60;
+  /// Deliberately excludes 61–180 s Shorts to reduce longform false positives.
   /// API duration alone does not prove YouTube Shorts classification.
   /// Downloaded vertical or square geometry is required as an extra gate.
   static bool isShortGeometry(int seconds,int? width,int? height)=>
