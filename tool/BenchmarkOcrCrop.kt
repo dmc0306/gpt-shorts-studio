@@ -6,6 +6,7 @@ import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.TextRecognizer
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import com.google.mlkit.vision.text.korean.KoreanTextRecognizerOptions
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
@@ -20,20 +21,27 @@ object BenchmarkOcrCrop {
             "w" to w.toDouble()/width,"h" to h.toDouble()/height)
     }
 
-    fun newRecognizer():TextRecognizer =
-        TextRecognition.getClient(KoreanTextRecognizerOptions.Builder().build())
+    /** OCR needs both Hangul and Latin; English overlays previously slipped
+     * past the Korean-only recognition model. Both are bundled on-device.
+     */
+    fun newRecognizers():List<TextRecognizer> = listOf(
+        TextRecognition.getClient(KoreanTextRecognizerOptions.Builder().build()),
+        TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS))
+
 
     /** Single-character reaction subtitles count as text too.
      * The first scan is made on the whole scene, the second on a zoomed crop.
      * An OCR miss can still happen, so this is a conservative filter, not
      * proof that the image contains absolutely no lettering.
      */
-    private fun findTextBoxes(frame:Bitmap,recognizer:TextRecognizer):List<Rect>{
-        val output=Tasks.await(
-            recognizer.process(InputImage.fromBitmap(frame,0)),
-            7,TimeUnit.SECONDS)
+    private fun findTextBoxes(frame:Bitmap,recognizers:List<TextRecognizer>):List<Rect>{
+        // Conservative: if either scanner throws or times out, callers skip
+        // this crop rather than mistakenly marking the image subtitle-free.
         val result=mutableListOf<Rect>()
-        for(block in output.textBlocks) for(line in block.lines){
+        val image=InputImage.fromBitmap(frame,0)
+        for(recognizer in recognizers){
+          val output=Tasks.await(recognizer.process(image),5,TimeUnit.SECONDS)
+          for(block in output.textBlocks) for(line in block.lines){
             if(!line.text.any{it.isLetterOrDigit()})continue
             val rect=line.boundingBox?:continue
             // Include the colored glow/outline around subtitles and
@@ -44,13 +52,14 @@ object BenchmarkOcrCrop {
                 (rect.top-dy).coerceAtLeast(0),
                 (rect.right+dx).coerceAtMost(frame.width),
                 (rect.bottom+dy).coerceAtMost(frame.height)))
+          }
         }
         return result
     }
 
-    fun select(frame:Bitmap,recognizer:TextRecognizer):Region?{
+    fun select(frame:Bitmap,recognizers:List<TextRecognizer>):Region?{
         // Do not silently accept a frame if either OCR pass fails.
-        val boxes=findTextBoxes(frame,recognizer)
+        val boxes=findTextBoxes(frame,recognizers)
         val width=frame.width;val height=frame.height
         val possibilities=mutableListOf<Region>()
         val seen=mutableSetOf<String>()
@@ -71,7 +80,7 @@ object BenchmarkOcrCrop {
             }
         }
         // Only recheck the largest OCR-free alternatives; bound processing.
-        val ordered=possibilities.sortedByDescending{it.areaScore}.take(8)
+        val ordered=possibilities.sortedByDescending{it.areaScore}.take(3)
         for(region in ordered){
             val crop=Bitmap.createBitmap(frame,region.x,region.y,region.w,region.h)
             try{
@@ -82,7 +91,7 @@ object BenchmarkOcrCrop {
                 val scaled=if(multiplier>1)Bitmap.createScaledBitmap(crop,
                     crop.width*multiplier,crop.height*multiplier,true)else crop
                 try{
-                    if(findTextBoxes(scaled,recognizer).isEmpty())return region
+                    if(findTextBoxes(scaled,recognizers).isEmpty())return region
                 }finally{
                     if(scaled!==crop)scaled.recycle()
                 }
