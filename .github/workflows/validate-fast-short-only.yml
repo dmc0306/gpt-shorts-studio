@@ -1,0 +1,46 @@
+name: Validate short-only dual-script OCR
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tool/BenchmarkOcrCrop.kt'
+      - 'tool/BenchmarkFrameExtractor.kt'
+      - 'tool/benchmark_data.dart'
+      - 'tool/benchmark_duration.dart'
+      - 'tool/benchmark_stream.dart'
+      - 'tool/benchmark_oneclick.dart'
+      - 'tool/benchmark_ui.dart'
+      - 'tool/benchmark_tests.dart'
+      - 'tool/patch_fast_short_only.py'
+      - '.github/workflows/validate-fast-short-only.yml'
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package and extract updated app
+        run: |
+          python3 tool/patch_fast_short_only.py
+          unzip -q shorts-studio-source.zip -d app
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generate native Android tree and Latin OCR dependency
+        working-directory: app
+        run: |
+          python3 tool/bootstrap.py
+          grep -q 'com.google.mlkit:text-recognition:16.0.1' android/app/build.gradle*
+      - name: Flutter static analysis
+        working-directory: app
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Flutter regression tests
+        working-directory: app
+        run: flutter test
