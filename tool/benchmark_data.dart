@@ -72,6 +72,8 @@ class BenchState {
   final confirmed=<String,String>{...benchmarkGroundTruth};
   /// Explicitly rejected source links for this benchmark video.
   final rejected=<String,Set<String>>{};
+  /// Separately track videos users rejected specifically for embedded captions.
+  final captioned=<String,Set<String>>{};
   final diagnostics=<String,String>{};
   Map<String,dynamic> toJson()=>{'channels':channels,'top':top.map((k,v)=>MapEntry(k,v.map((e)=>e.toJson()).toList())),
     'scanned':scanned,'complete':complete,'seen':seen.toList(),'selected':selected,
@@ -79,6 +81,7 @@ class BenchState {
     'chosen':chosen,'rights':rights,'proof':proof,
     'confirmed':confirmed,
     'rejected':rejected.map((k,v)=>MapEntry(k,v.toList())),
+    'captioned':captioned.map((k,v)=>MapEntry(k,v.toList())),
     'diagnostics':diagnostics};
   factory BenchState.fromJson(Map raw){
     final b=BenchState();
@@ -136,6 +139,13 @@ class BenchState {
         if(k is! String||v is! List)return;
         final valid=v.whereType<String>().map(normalOrigin).whereType<String>().toSet();
         if(valid.isNotEmpty)b.rejected[k]=valid;
+      });
+    }
+    if(raw['captioned'] is Map){
+      (raw['captioned'] as Map).forEach((k,v){
+        if(k is! String||v is! List)return;
+        final safe=v.whereType<String>().map(normalOrigin).whereType<String>().toSet();
+        if(safe.isNotEmpty)b.captioned[k]=safe;
       });
     }
     if(raw['diagnostics'] is Map){

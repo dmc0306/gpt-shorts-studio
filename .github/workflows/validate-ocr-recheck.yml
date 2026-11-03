@@ -5,7 +5,6 @@ on:
     paths:
       - 'tool/BenchmarkOcrCrop.kt'
       - 'tool/BenchmarkFrameExtractor.kt'
-      - 'tool/benchmark_ui.dart'
       - 'tool/patch_ocr_recheck.py'
       - '.github/workflows/validate-ocr-recheck.yml'
 permissions:
@@ -16,9 +15,11 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-      - name: Patch source ZIP
+      - name: Patch source ZIP when on OCR predecessor version
         run: |
-          python3 tool/patch_ocr_recheck.py
+          if unzip -p shorts-studio-source.zip pubspec.yaml | grep -Fq 'version: 0.21.16+75'; then
+            python3 tool/patch_ocr_recheck.py
+          fi
           unzip -q shorts-studio-source.zip -d app
       - uses: actions/setup-java@v4
         with:

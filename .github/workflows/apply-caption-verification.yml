@@ -1,0 +1,26 @@
+name: Apply candidate caption verification patch
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/apply-caption-verification.yml'
+      - 'tool/patch_caption_verification.py'
+permissions:
+  contents: write
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Apply source patch
+        run: python3 tool/patch_caption_verification.py
+      - name: Commit versioned source archive
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add shorts-studio-source.zip
+          git diff --cached --quiet && { echo "No changes"; exit 0; }
+          git commit -m "Package v0.21.18 caption verification release"
+          git push
