@@ -27,6 +27,10 @@ class BenchVideo {
   const BenchVideo(this.id,this.channelId,this.channel,this.title,this.description,this.views,this.duration,this.publishedAt);
   final String id,channelId,channel,title,description,publishedAt;
   final int views,duration;
+  /// Strict short-video mode: under one minute. 61–180 s official Shorts
+  /// are intentionally omitted to avoid short horizontal longform uploads.
+  static const maxAutoSeconds=60;
+  bool get eligibleForAutoSearch=>duration>0&&duration<=maxAutoSeconds;
   String get url=>'https://www.youtube.com/watch?v=$id';
   Map<String,dynamic> toJson()=>{'id':id,'channelId':channelId,'channel':channel,'title':title,
     'description':description,'views':views,'duration':duration,'publishedAt':publishedAt};
@@ -159,7 +163,7 @@ class BenchState {
   void draw(){
     selected.clear();final rng=Random.secure();
     for(final key in channels.keys){
-      final available=(top[key]??[]).where((v)=>!seen.contains(v.id)).toList();
+      final available=(top[key]??[]).where((v)=>v.eligibleForAutoSearch&&!seen.contains(v.id)).toList();
       if(available.isEmpty)continue;
       final v=available[rng.nextInt(available.length)];
       selected.add(v.id);seen.add(v.id);
@@ -209,7 +213,7 @@ class BenchApi {
         final meta=row['snippet'],stats=row['statistics'],details=row['contentDetails'];
         if(row['id'] is! String||meta is! Map||stats is! Map||details is! Map)continue;
         final duration=BenchVideo.seconds(details['duration'] as String? ?? '');
-        if(duration<1||duration>180)continue; // Shorts candidate, NOT proof of Shorts classification.
+        if(duration<1||duration>BenchVideo.maxAutoSeconds)continue; // Strict duration prefilter, NOT proof of Shorts format.
         videos.add(BenchVideo(row['id'] as String,id,name,meta['title'] as String? ?? '',
           meta['description'] as String? ?? '',
           int.tryParse(stats['viewCount']?.toString()??'')??0,duration,
