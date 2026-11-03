@@ -47,7 +47,13 @@ class _BenchmarkState extends State<BenchmarkScreen>{
    // Expire the previous text-search origin suggestions; keep user-added links.
    for(final id in state.origins.keys.toList()){
      state.origins[id]=state.origins[id]!.where((c)=>
-       c.source=='실제 동영상 교차확인'||c.source=='검증되지 않은 검색 후보'||c.source=='직접 추가').toList();
+       c.source=='실제 동영상 교차확인'||
+       c.source=='실제 영상 미검증 후보'||
+       c.source=='자막 검출 후보'||
+       c.source=='자막 확인 필요 후보'||
+       c.source=='연관 페이지만 확인'||
+       c.source=='검증되지 않은 검색 후보'||
+       c.source=='직접 추가').toList();
      if(!state.origins[id]!.any((c)=>c.url==state.chosen[id]))state.chosen.remove(id);
    }
   }catch(_){message='이전 소재 기록을 불러오지 못했어요.';}
