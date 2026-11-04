@@ -21,9 +21,13 @@ jobs:
           find lib native/android test -maxdepth 2 -type f \( -iname '*youtube*' -o -iname '*upload*' -o -iname '*scheduler*' \) | sort
           printf '\n*** UPLOAD REFERENCES ***\n'
           rg -n -m 16 'publishAt|privacyStatus|youtubeUpload|uploadVideo|upload\(|automatic|schedule|youtube\.upload|resumable|YouTubeService|class YouTube|uploadQueue' lib native/android test 2>/dev/null | head -230 || true
-          for file in lib/youtube.dart lib/youtube_chrome.dart lib/youtube_settings.dart lib/main.dart lib/youtube_uploader.dart lib/youtube_upload.dart lib/model.dart lib/editor.dart; do
-            if [ -f "$file" ]; then
-              printf '\n*** FILE %s (first 240 lines) ***\n' "$file"
-              sed -n '1,240p' "$file"
-            fi
-          done
+          printf '\n*** YOUTUBE MODELS / UI ***\n'
+          sed -n '1,340p' lib/youtube_channel.dart
+          sed -n '1,360p' lib/youtube_panel.dart
+          sed -n '240,640p' lib/youtube.dart
+          sed -n '220,540p' lib/youtube_settings.dart
+          printf '\n*** MAIN PUBLISH TRIGGERS ***\n'
+          rg -n -C 8 'youtube\.upload|youtube\.automatic|YoutubePanel|YouTubePanel|automatic|youtubeSettings|YouTubeUpload' lib/main.dart lib/editor.dart lib/youtube.dart lib/youtube_panel.dart | head -400 || true
+          printf '\n*** UPLOAD TESTS ***\n'
+          sed -n '1,280p' test/youtube_upload_test.dart
+          sed -n '1,260p' test/youtube_auto_batch_failure_test.dart
