@@ -23,7 +23,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Package and extract updated app
         run: |
-          python3 tool/patch_fast_short_only.py
+          if unzip -p shorts-studio-source.zip pubspec.yaml | grep -Fq 'version: 0.21.18+77'; then
+            python3 tool/patch_fast_short_only.py
+          else
+            echo "Dual OCR already packaged in newer source archive."
+          fi
           unzip -q shorts-studio-source.zip -d app
       - uses: actions/setup-java@v4
         with:
