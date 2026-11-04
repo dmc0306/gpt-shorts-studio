@@ -435,4 +435,36 @@ void main(){
    expect(recovered.rejected.isEmpty,true);
  });
 
+ test('Search-history backup roundtrip keeps channels and decisions',(){
+   final channel=BenchChannel.defaults.first.id;
+   const id='ABCDEFGHIJK';
+   final source=BenchState();
+   source.top[channel]=[const BenchVideo(id,'channel','Demo','My title','',
+      200,48,'2026-11-04')];
+   source.selected.add(id);
+   source.seen.add(id);
+   source.captioned[id]={'https://www.instagram.com/reel/FakeClip123/'};
+   source.rejected[id]={'https://www.tiktok.com/@demo/video/12345'};
+   source.diagnostics[id]='검증된 원본 0건';
+   final exported=jsonEncode(source.toJson());
+   expect(exported,contains('FakeClip123'));
+   final data=jsonDecode(exported) as Map;
+   expect(data.containsKey('apiKey'),false);
+   expect(data.containsKey('visionKey'),false);
+   final restored=BenchState.fromJson(data);
+   expect(restored.channels[channel],isNotEmpty);
+   expect(restored.top[channel]?.single.duration,48);
+   expect(restored.selected,contains(id));
+   expect(restored.captioned[id]!.length,1);
+   expect(restored.rejected[id]!.length,1);
+   expect(restored.diagnostics[id],'검증된 원본 0건');
+ });
+ test('Source link and video decisions remain separate from app API secrets',(){
+   final b=BenchState();
+   b.chosen['ABCDEFGHIJK']='https://www.instagram.com/reel/Source123/';
+   final restored=BenchState.fromJson(jsonDecode(jsonEncode(b.toJson())) as Map);
+   expect(restored.chosen['ABCDEFGHIJK'],b.chosen['ABCDEFGHIJK']);
+   expect(b.toJson().containsKey('secret'),false);
+ });
+
 }

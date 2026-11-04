@@ -1,0 +1,38 @@
+name: Validate simplified benchmark UX
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tool/benchmark_ui.dart'
+      - 'tool/benchmark_tests.dart'
+      - 'tool/patch_benchmark_ux.py'
+      - '.github/workflows/validate-benchmark-ux.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package UI redesign on isolated app ZIP
+        run: |
+          python3 tool/patch_benchmark_ux.py
+          unzip -q shorts-studio-source.zip -d app
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generate Android / Flutter project
+        working-directory: app
+        run: python3 tool/bootstrap.py
+      - name: Flutter analyze
+        working-directory: app
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Flutter regression tests
+        working-directory: app
+        run: flutter test
