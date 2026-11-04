@@ -322,3 +322,15 @@ PR #8 https://github.com/dmc0306/gpt-shorts-studio/pull/8 . 모든 PR CI 통과:
 사용자가 벤치마킹 쇼츠에서 첫 번째 TikTok 검색 후보가 실제 동일 영상임을 직접 확인했지만 후보 영상 자동 검사 단계에서 '추출기 오류 10204'로 미검증 표시되는 사례 보고. 코드 분석: CandidateFailure.describe에서 10204/PAGE_UNAVAILABLE은 TikTok 후보 영상의 메타데이터/스트림 확보 실패를 의미하며, 영상 내용 불일치의 증거가 아님. UI는 웹 이미지 일치, 실제 스트림 검증 성공, 무자막 여부, 권리 확인을 구분해야 함.
 이번 릴리스: BenchState.matchedByUser와 localSceneChecks를 별도 저장하고 복원해, ‘같은 영상 확인’ 버튼이 영상 일치를 사용자가 확인한 상태로 보존하되 OCR/재사용권 승인과 자동 집계를 분리. TikTok 후보에 ‘영상 파일로 비교’ 버튼 추가. 사용자가 합법적으로 확보한 로컬 후보 파일을 Android benchmarkPickFrames에서 선택하여 YouTube 기준 쇼츠에서 추출한 OCR-스크리닝 장면과 비교. 3개 이상의 시각적으로 다른 장면이 시간순으로 근접 해시 일치, 길이 허용 범위 통과 시 로컬 파일의 영상 내용 일치 근거로만 표시. 선택한 파일이 해당 TikTok URL과 동일한 미디어인지는 사용자가 별도 연결 확인, 원본 전체 자막 없음이나 원제작자·이용 허가는 검증되지 않았다고 유지. 자동 검증이 실패해도 사용자가 확인한 첫 후보 링크는 검색 갱신 후 남음. 부적합 후보로 제외하면 사용자 확인/로컬 장면 증거 동시 정리.
 테스트: 3장 이상 일치, 역시간 장면, 정적 반복 장면, 길이 불일치, 사용자 확인 URL/파일 증거 영속성과 검증 상태 구분. PR #9 https://github.com/dmc0306/gpt-shorts-studio/pull/9. 모든 Flutter PR CI 테스트 통과 https://github.com/dmc0306/gpt-shorts-studio/actions/runs/41843920503 . v0.21.21+80 source ZIP 패키징 main commit 93d7d06e40fcbb724de6741b545f006a3075c263. Android 고정 서명 빌드는 이 기록 커밋에서 트리거해 후속 확인.
+
+## 2026-11-05 — v0.21.22+81 YouTube 전체 공개 / 예약 공개 / 반복 공개 업로드
+사용자 요청: Short Studio가 저장된 쇼츠를 비공개뿐 아니라 공개로 자동 업로드하고, 주기(매일/2일/3일/매주), 업로드 시각을 설정해 공개하게 만들기. 기존 OAuth Chrome 채널 확인 및 암호화 토큰, resumable uploader와 Editor/AutoBatch의 MP4 저장 후 자동 업로드 연결을 사용.
+구현:
+- lib/youtube_publish_plan.dart: 기본 private, 즉시 public, 예약 private+status.publishAt(UTC) 모드; 24/48/72/168h, 시/분, 기존 마지막 예약 이후의 다음 게시 시간, 최소 1시간 여유.
+- youtube_channel.dart Preferences: publishMode, cadenceHours, publishHour, publishMinute, lastScheduledAtUtc, publicConsentChannel. 업로드 대상 채널 확인/아동용 설정과 **같은 채널의 명시적 공개 동의**가 있어야 public/scheduled. 기존 설정은 private 기본값 보존. 계정·채널이 바뀌면 공개 동의가 자동으로 유효하지 않음.
+- youtube.dart: 새 MP4 저장 후 자동 업로드가 켜져 있으면 설정한 모드로 전송, 예약이면 다음 시간대를 먼저 예약하고 저장; 전송 세션을 이어 올릴 때 과거 비공개 세션의 게시 상태를 임의로 바꾸지 않음. YouTubeUpload 기존 세션/영상 ID 중복 방지 유지.
+- youtube_upload.dart: videos.insert의 status.privacyStatus=public 즉시 공개 또는 private+publishAt 미래 예약, 응답 videoId/요청·실제 상태 저장. 업로드가 너무 늦어 예약 시각이 가까워지면 오류 처리.
+- youtube_settings.dart: 공개 범위, 반복 주기, 로컬 게시 시각, 다음 예정일, 저작권/재게시 허가 동의 다이얼로그, 기존 자동 MP4 업로드 설정 통합.
+- youtube_batch_publish_screen.dart: 완성 MP4 최대 20개 선택하여 지금 순차 전송하고 각 영상 YouTube 예약 공개. 미리 예약 시간 표시, 채널·권리 최종 승인, 진행·중단·중복방지 및 실패 시 남은 영상 보존. YouTubePanel/앱 메인 화면에서 진입 가능.
+중요한 한계: 휴대폰 앱이 실행 중일 때만 새로운 영상 파일을 업로드함. YouTube가 업로드된 영상을 미래의 시각에 자동 공개하는 것은 앱이 꺼져도 동작. 휴대폰이 꺼진 상태에서 새 영상을 생성·업로드하는 무중단 백그라운드 서버 스케줄러는 포함되지 않음. 이미 비공개로 게시한 영상은 자동 공개 상태로 변경되지 않음(YouTube Studio에서 변경). TikTok 등 재사용 영상은 저작권/이용 권한 확인이 필요.
+PR #10 https://github.com/dmc0306/gpt-shorts-studio/pull/10 , latest Flutter analyze/test PASS https://github.com/dmc0306/gpt-shorts-studio/actions/runs/41935991041 . Android signed build는 패키징 커밋 cf3474c6e3e105b2cca110757052e241c6e5095d 이후 본 문서 커밋으로 트리거.
