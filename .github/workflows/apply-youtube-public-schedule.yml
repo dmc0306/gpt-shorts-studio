@@ -1,0 +1,27 @@
+name: Package public and scheduled YouTube uploads
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/apply-youtube-public-schedule.yml'
+      - 'tool/patch_youtube_public_schedule.py'
+permissions:
+  contents: write
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Apply guarded source archive patch
+        run: python3 tool/patch_youtube_public_schedule.py
+      - name: Commit release archive
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add shorts-studio-source.zip
+          git diff --cached --quiet && { echo "No packaging changes"; exit 0; }
+          git commit -m "Package v0.21.22 public and scheduled YouTube publishing"
+          git push
