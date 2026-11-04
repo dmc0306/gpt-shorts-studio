@@ -1,0 +1,29 @@
+name: Inspect existing YouTube upload architecture
+on:
+  push:
+    branches: [feat/public-scheduled-batch-upload-20261105]
+    paths:
+      - '.github/workflows/inspect-upload-architecture.yml'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect source modules (no credentials)
+        run: |
+          mkdir -p /tmp/shorts-recon
+          unzip -q shorts-studio-source.zip -d /tmp/shorts-recon
+          cd /tmp/shorts-recon
+          printf '\n*** YOUTUBE MODULE FILES ***\n'
+          find lib native/android test -maxdepth 2 -type f \( -iname '*youtube*' -o -iname '*upload*' -o -iname '*scheduler*' \) | sort
+          printf '\n*** UPLOAD REFERENCES ***\n'
+          rg -n -m 16 'publishAt|privacyStatus|youtubeUpload|uploadVideo|upload\(|automatic|schedule|youtube\.upload|resumable|YouTubeService|class YouTube|uploadQueue' lib native/android test 2>/dev/null | head -230 || true
+          for file in lib/youtube.dart lib/youtube_chrome.dart lib/youtube_settings.dart lib/main.dart lib/youtube_uploader.dart lib/youtube_upload.dart lib/model.dart lib/editor.dart; do
+            if [ -f "$file" ]; then
+              printf '\n*** FILE %s (first 240 lines) ***\n' "$file"
+              sed -n '1,240p' "$file"
+            fi
+          done
