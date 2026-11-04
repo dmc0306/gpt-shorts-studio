@@ -433,159 +433,272 @@ class _BenchmarkState extends State<BenchmarkScreen>{
   }catch(e){report('원본 가져오기/편집 실패: $e');}
   finally{if(mounted)setState(()=>busy=false);}
  }
+
+ Future<void> rejectOrigin(BenchVideo v,BenchOrigin origin,{required bool captioned})async{
+   if(busy)return;
+   setState((){
+     final target=captioned?state.captioned:state.rejected;
+     target.putIfAbsent(v.id,()=><String>{}).add(origin.url);
+     state.origins[v.id]?.removeWhere((candidate)=>candidate.url==origin.url);
+     if(state.chosen[v.id]==origin.url)state.chosen.remove(v.id);
+     if(state.confirmed[v.id]==origin.url)state.confirmed.remove(v.id);
+   });
+   await save();
+   report(captioned
+     ?'자막이 포함된 후보로 제외했어요. 이 주소는 다음 검색에서 건너뛰어요.'
+     :'원본이 아닌 후보로 제외했어요. 이 주소는 다음 검색에서 건너뛰어요.');
+ }
+ Future<void> confirmOrigin(BenchVideo v,BenchOrigin origin)async{
+   if(busy)return;
+   final confirmed=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(
+     title:const Text('자막 없는 원본을 확인했나요?'),
+     content:Text('다음 사항을 영상 전체에서 직접 확인해 주세요.\n\n'
+       '• 기준 영상과 실제 장면이 일치함\n'
+       '• 이미 입혀진 제목이나 자막이 없음\n'
+       '• 이용 권한을 확인함\n\n'
+       '자동 검증 성공 건수로 집계하지 않습니다.\n\n${origin.url}'),
+     actions:[
+       TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('취소')),
+       FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('확인 후 저장'))
+     ]));
+   if(confirmed!=true||!mounted)return;
+   setState((){
+     state.confirmed[v.id]=origin.url;
+     state.chosen[v.id]=origin.url;
+     state.rejected[v.id]?.remove(origin.url);
+     state.captioned[v.id]?.remove(origin.url);
+   });
+   await save();
+   report('직접 확인한 원본을 저장했어요. 검증 없이 자동 확정한 기록으로 계산하지 않아요.');
+ }
+ Widget candidateTile(BenchVideo v,BenchOrigin x){
+   final colors=Theme.of(context).colorScheme;
+   final autoVerified=x.source=='실제 동영상 교차확인';
+   final manuallyVerified=x.source=='사용자 제공 원본';
+   final verified=autoVerified||manuallyVerified;
+   final captioned=x.source=='자막 검출 후보';
+   final maybeCaptioned=x.source=='자막 확인 필요 후보';
+   final selected=state.chosen[v.id]==x.url;
+   final uri=Uri.tryParse(x.url);
+   final host=uri?.host.toLowerCase()??'외부 링크';
+   final provider=host.contains('instagram')?'Instagram':
+     host.contains('tiktok')?'TikTok':
+     host.contains('youtube')||host=='youtu.be'?'YouTube':'외부 링크';
+   final status=verified?'원본 확인됨':captioned?'기존 자막 감지':
+     maybeCaptioned?'자막 확인 필요':'영상 미검증';
+   final statusColor=verified?colors.primary:
+     captioned||maybeCaptioned?colors.error:colors.onSurfaceVariant;
+   final statusIcon=verified?Icons.verified_outlined:
+     captioned||maybeCaptioned?Icons.closed_caption_outlined:Icons.help_outline;
+   return Card(
+     margin:const EdgeInsets.only(bottom:10),
+     elevation:0,
+     color:selected?colors.primaryContainer.withValues(alpha:.45):colors.surfaceContainerLow,
+     child:Padding(padding:const EdgeInsets.fromLTRB(14,12,14,10),
+       child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+         Row(children:[
+           Icon(statusIcon,size:20,color:statusColor),
+           const SizedBox(width:8),
+           Expanded(child:Text(provider,
+             style:const TextStyle(fontWeight:FontWeight.w700,fontSize:14))),
+           Text(status,style:TextStyle(fontSize:12,fontWeight:FontWeight.w600,color:statusColor))
+         ]),
+         const SizedBox(height:6),
+         Text(x.url,maxLines:1,overflow:TextOverflow.ellipsis,
+           style:TextStyle(fontSize:12,color:colors.onSurfaceVariant)),
+         const SizedBox(height:6),
+         Text(x.evidence,maxLines:3,overflow:TextOverflow.ellipsis,
+           style:TextStyle(fontSize:12,height:1.4,color:colors.onSurfaceVariant)),
+         const SizedBox(height:6),
+         Wrap(spacing:4,runSpacing:2,crossAxisAlignment:WrapCrossAlignment.center,children:[
+           TextButton.icon(
+             onPressed:busy?null:()=>open(x.url),
+             icon:const Icon(Icons.open_in_new,size:16),
+             label:const Text('영상 보기')),
+           if(verified)
+             FilledButton.tonalIcon(
+               onPressed:busy?null:()async{
+                 setState(()=>state.chosen[v.id]=x.url);
+                 await save();
+               },
+               icon:Icon(selected?Icons.check:Icons.movie_creation_outlined,size:16),
+               label:Text(selected?'선택됨':'이 원본 사용')),
+           if(!verified)
+             TextButton.icon(onPressed:busy?null:()=>confirmOrigin(v,x),
+               icon:const Icon(Icons.bookmark_add_outlined,size:16),
+               label:const Text('직접 확인·저장')),
+           if(!manuallyVerified)
+             PopupMenuButton<String>(
+               tooltip:'후보 관리',
+               enabled:!busy,
+               onSelected:(choice)=>rejectOrigin(v,x,captioned:choice=='caption'),
+               itemBuilder:(ctx)=>const [
+                 PopupMenuItem(value:'caption',child:Text('자막 있음 · 제외')),
+                 PopupMenuItem(value:'different',child:Text('원본 아님 · 제외')),
+               ],
+               icon:const Icon(Icons.more_horiz)),
+         ])
+       ])));
+ }
  Widget candidateCard(BenchVideo v){
    final userOriginal=state.confirmed[v.id];
-   final dismissed=state.rejected[v.id]??const <String>{};
-   final captioned=state.captioned[v.id]??const <String>{};
-   final hidden=<String>{...dismissed,...captioned};
-   final other=state.origins[v.id]??<BenchOrigin>[];
+   final rejected=state.rejected[v.id]??const <String>{};
+   final captions=state.captioned[v.id]??const <String>{};
+   final hidden=<String>{...rejected,...captions};
+   final candidates=state.origins[v.id]??<BenchOrigin>[];
    final list=<BenchOrigin>[
      if(userOriginal!=null)BenchOrigin(userOriginal,
-       '사용자가 원본이라고 제공한 링크 · 자동 이미지 검색의 발견 성과로 계산하지 않음',
-       '사용자 제공 원본'),
-     ...other.where((x)=>x.url!=userOriginal&&!hidden.contains(x.url))
+       '사용자가 직접 확인한 원본 · 검색 성공 통계에는 포함되지 않음','사용자 제공 원본'),
+     ...candidates.where((x)=>x.url!=userOriginal&&!hidden.contains(x.url))
    ];
+   int weight(BenchOrigin item){
+     if(item.source=='사용자 제공 원본')return 0;
+     if(item.source=='실제 동영상 교차확인')return 1;
+     if(item.source=='자막 검출 후보'||item.source=='자막 확인 필요 후보')return 3;
+     return 2;
+   }
+   list.sort((a,b)=>weight(a).compareTo(weight(b)));
    final selected=state.chosen[v.id];
-   final canCreate=selected!=null&&!busy;
-  return Card(child:Padding(padding:const EdgeInsets.all(12),child:Column(
-    crossAxisAlignment:CrossAxisAlignment.stretch,children:[
-     Text(v.channel,style:const TextStyle(fontSize:12)),
-     Text(v.title,style:const TextStyle(fontWeight:FontWeight.bold,fontSize:16)),
-     Text('조회 ${v.views} · ${v.duration}초 · ${v.publishedAt}',style:const TextStyle(fontSize:12)),
-     TextButton.icon(onPressed:()=>open(v.url),icon:const Icon(Icons.open_in_new),
-      label:const Text('벤치마킹 영상 확인')),
-     Wrap(spacing:8,children:[
-      FilledButton.icon(onPressed:busy?null:()=>search(v),
-        icon:const Icon(Icons.auto_awesome),label:const Text('원클릭 원본 탐색 → 검증 → 제작')),
-      FilledButton.icon(onPressed:busy?null:()=>search(v,continuous:true),
-        icon:const Icon(Icons.repeat),label:const Text('연속찾기 · 일치할 때까지 탐색')),
-      OutlinedButton(onPressed:busy?null:()=>search(v,manual:true),child:const Text('영상 파일 직접 선택')),
-      OutlinedButton(onPressed:busy?null:()=>addOrigin(v),child:const Text('원본 링크 추가'))]),
-     if(busy&&activeVideoId==v.id)...[
-       const SizedBox(height:8),
-       const LinearProgressIndicator(),
-       const SizedBox(height:4),
-       SelectableText(message,style:const TextStyle(fontSize:13,fontWeight:FontWeight.bold)),
-       Align(alignment:Alignment.centerLeft,child:TextButton.icon(
-         onPressed:cancelled?null:stopSearch,
-         icon:const Icon(Icons.stop_circle_outlined),
-         label:Text(cancelled?'중단 처리 중':'검색 중단'))),
-     ],
-     if(framePreviews[v.id]?.isNotEmpty==true)...[
-       const Text('자막 재검증을 통과한 검색용 장면 · 사진을 누르면 같은 크롭을 이미지 검색 앱으로 공유',style:TextStyle(fontSize:12,fontWeight:FontWeight.bold)),
-       const SizedBox(height:6),
-       SizedBox(height:124,child:ListView.separated(
-         scrollDirection:Axis.horizontal,
-         itemCount:framePreviews[v.id]!.length,
-         separatorBuilder:(_,i)=>const SizedBox(width:6),
-         itemBuilder:(_,index)=>InkWell(
-           onTap:()=>shareFrameToLens(v,index),
-           child:Stack(children:[
-             Image.memory(framePreviews[v.id]![index],
-               width:105,height:120,fit:BoxFit.cover),
-             const Positioned(right:4,bottom:4,
-               child:Icon(Icons.image_search,color:Colors.white,size:24)),
-           ])))),
-       const SizedBox(height:4),
-       const Text('프레임을 터치하면 화면에 표시된 OCR 검증 크롭 그대로 Google Lens 등에 공유해요. 원본 전체 화면이나 추가 자막은 다시 붙이지 않아요. OCR 누락은 여전히 가능해요.',
-          style:TextStyle(fontSize:12)),
-       const SizedBox(height:8),
-     ],
-     if(!busy&&state.diagnostics[v.id]?.isNotEmpty==true)
-       Padding(padding:const EdgeInsets.symmetric(vertical:8),
-         child:SelectableText('마지막 원본 탐색 진단: ${state.diagnostics[v.id]}',
-            style:const TextStyle(fontSize:12))),
-     if(captioned.isNotEmpty)Align(alignment:Alignment.centerLeft,
-       child:TextButton.icon(
-         onPressed:busy?null:()async{
-           setState(()=>state.captioned.remove(v.id));
-           await save();
-           report('자막이 있는 것으로 제외했던 ${captioned.length}건의 링크를 다시 검색할 수 있어요.');
-         },
-         icon:const Icon(Icons.undo,size:16),
-         label:Text('자막 있음으로 제외한 ${captioned.length}건 초기화'))),
-     if(dismissed.isNotEmpty)Align(alignment:Alignment.centerLeft,
-       child:TextButton.icon(
-         onPressed:busy?null:()async{
-           setState(()=>state.rejected.remove(v.id));
-           await save();
-           report('이 영상에서 제외했던 후보 ${dismissed.length}건을 다시 표시할 수 있어요.');
-         },
-         icon:const Icon(Icons.undo,size:16),
-         label:Text('원본 아님으로 제외한 ${dismissed.length}건 초기화'))),
-     if(list.isEmpty&&!busy)const Text('원본 후보 없음 · 위 진단을 확인하세요. 웹 이미지 색인에 영상 원본이 없을 수도 있습니다.',
-       style:TextStyle(fontSize:12)),
-     for(final x in list)Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-       RadioListTile<String>(dense:true,contentPadding:EdgeInsets.zero,
-      title:Text('${x.source}: ${x.url}',maxLines:2,overflow:TextOverflow.ellipsis),
-      subtitle:Text(x.evidence,style:const TextStyle(fontSize:12)),
-      value:x.url,groupValue:selected,
-      onChanged:busy||x.source=='실제 영상 미검증 후보'||
-          x.source=='자막 검출 후보'||
-          x.source=='자막 확인 필요 후보'||
-          x.source=='연관 페이지만 확인'?null:(u){
-        setState(()=>state.chosen[v.id]=u!);save();}),
-     Padding(padding:const EdgeInsets.only(left:32,bottom:8),
-       child:Align(alignment:Alignment.centerLeft,
-         child:TextButton.icon(onPressed:()=>open(x.url),
-           icon:const Icon(Icons.open_in_new,size:17),
-           label:const Text('후보 게시물 열어보기')))),
-       if(x.source!='사용자 제공 원본')
-         Wrap(spacing:6,children:[
-           TextButton.icon(onPressed:busy?null:()async{
-             setState((){
-               state.rejected.putIfAbsent(v.id,()=> <String>{}).add(x.url);
-               state.origins[v.id]?.removeWhere((o)=>o.url==x.url);
-               if(state.chosen[v.id]==x.url)state.chosen.remove(v.id);
-             });
-             await save();
-             report('원본 아님으로 제외했어요. 다음 검색에서 이 링크는 건너뜁니다.');
-           },icon:const Icon(Icons.block,size:16),
-             label:const Text('원본 아님')),
-           TextButton.icon(onPressed:busy?null:()async{
-             setState((){
-               state.captioned.putIfAbsent(v.id,()=> <String>{}).add(x.url);
-               state.origins[v.id]?.removeWhere((o)=>o.url==x.url);
-               if(state.chosen[v.id]==x.url)state.chosen.remove(v.id);
-               if(state.confirmed[v.id]==x.url)state.confirmed.remove(v.id);
-             });
-             await save();
-             report('기존 자막이 포함된 후보로 제외했어요. 이후 검색에서는 이 링크를 건너뛰어요.');
-           },icon:const Icon(Icons.closed_caption_disabled,size:16),
-             label:const Text('자막 있음 · 제외')),
-           TextButton.icon(onPressed:busy?null:()async{
-             final confirmed=await showDialog<bool>(context:context,
-               builder:(ctx)=>AlertDialog(
-                 title:const Text('자막 없는 실제 원본을 확인했나요?'),
-                 content:Text('검색 결과가 유사하다는 것만으로는 확인할 수 없어요. '
-                     '영상 전체의 장면이 일치하고, 이미 입혀진 제목·단어 자막이 없으며 '
-                     '사용 권한도 직접 확인했을 때만 저장하세요. '
-                     '이 확인은 자동 검증 성공으로 집계하지 않습니다.\\n\\n${x.url}'),
-                 actions:[
-                   TextButton(onPressed:()=>Navigator.pop(ctx,false),
-                     child:const Text('취소')),
-                   FilledButton(onPressed:()=>Navigator.pop(ctx,true),
-                     child:const Text('확인 후 저장')),
-                 ]));
-             if(confirmed!=true||!mounted)return;
-             setState((){
-               state.confirmed[v.id]=x.url;
-               state.chosen[v.id]=x.url;
-               state.rejected[v.id]?.remove(x.url);
-               state.captioned[v.id]?.remove(x.url);
-             });
-             await save();
-             report('사용자가 확인한 원본으로 보존했어요. 다음 검색으로 삭제되지 않아요.');
-           },icon:const Icon(Icons.bookmark_add_outlined,size:16),
-             label:const Text('원본 확인·저장')),
-         ]), ]),
-     if(selected!=null)TextButton.icon(onPressed:()=>open(selected),
-      icon:const Icon(Icons.open_in_new),label:const Text('선택한 원본 확인')),
-     const SizedBox(height:8),
-     FilledButton.icon(onPressed:canCreate?()=>create(v):null,
-      icon:const Icon(Icons.movie_creation_outlined),
-      label:const Text('선택한 원본 → 템플릿 제작')),
-    ])));
+   final all=shownAllCandidates.contains(v.id);
+   final visible=all?list:list.take(3).toList();
+   final verifiedCount=list.where((c)=>weight(c)<2).length;
+   final theme=Theme.of(context);
+   final colors=theme.colorScheme;
+   return Card(
+     elevation:0,
+     margin:const EdgeInsets.only(bottom:16),
+     shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(20),
+       side:BorderSide(color:colors.outlineVariant)),
+     child:Padding(padding:const EdgeInsets.all(16),
+       child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+         Row(children:[
+           Expanded(child:Text(v.channel,
+             style:TextStyle(fontSize:12,fontWeight:FontWeight.w700,color:colors.primary))),
+           Text('${v.duration}초 · 조회 ${v.views}',
+             style:TextStyle(fontSize:12,color:colors.onSurfaceVariant)),
+         ]),
+         const SizedBox(height:4),
+         Text(v.title,maxLines:3,overflow:TextOverflow.ellipsis,
+           style:theme.textTheme.titleMedium?.copyWith(fontWeight:FontWeight.w800)),
+         Align(alignment:Alignment.centerLeft,child:TextButton.icon(
+           onPressed:()=>open(v.url),
+           icon:const Icon(Icons.play_circle_outline,size:18),
+           label:const Text('벤치마킹 영상 보기'))),
+         const SizedBox(height:6),
+         if(activeVideoId==v.id&&busy)...[
+           const LinearProgressIndicator(),
+           const SizedBox(height:8),
+           Text(message,style:TextStyle(fontSize:13,color:colors.primary)),
+           Align(alignment:Alignment.centerRight,child:TextButton.icon(
+             onPressed:cancelled?null:stopSearch,
+             icon:const Icon(Icons.stop_circle_outlined,size:18),
+             label:Text(cancelled?'중단 요청 중':'검색 중단'))),
+         ]else...[
+           SizedBox(width:double.infinity,child:FilledButton.icon(
+             onPressed:busy?null:()=>search(v,continuous:true),
+             icon:const Icon(Icons.manage_search),
+             label:const Padding(padding:EdgeInsets.symmetric(vertical:5),
+               child:Text('자막 없는 원본 찾기')))),
+           const SizedBox(height:4),
+           Text('일치 장면을 찾을 때까지 중복 없이 탐색 · 최대 6회',
+             style:TextStyle(fontSize:12,color:colors.onSurfaceVariant)),
+         ],
+         const SizedBox(height:10),
+         if(framePreviews[v.id]?.isNotEmpty==true)...[
+           Row(children:[
+             const Icon(Icons.photo_library_outlined,size:17),
+             const SizedBox(width:6),
+             Text('검색 이미지 ${framePreviews[v.id]!.length}장',
+               style:const TextStyle(fontSize:13,fontWeight:FontWeight.w700)),
+             const Spacer(),
+             Text('눌러서 이미지 검색',style:TextStyle(fontSize:11,color:colors.onSurfaceVariant))
+           ]),
+           const SizedBox(height:8),
+           SizedBox(height:130,child:ListView.separated(
+             scrollDirection:Axis.horizontal,
+             itemCount:framePreviews[v.id]!.length,
+             separatorBuilder:(_,i)=>const SizedBox(width:8),
+             itemBuilder:(_,index)=>InkWell(
+               borderRadius:BorderRadius.circular(12),
+               onTap:()=>shareFrameToLens(v,index),
+               child:ClipRRect(borderRadius:BorderRadius.circular(12),
+                 child:Stack(children:[
+                   Container(width:130,height:126,color:colors.surfaceContainer),
+                   SizedBox(width:130,height:126,
+                     child:Image.memory(framePreviews[v.id]![index],fit:BoxFit.contain)),
+                   Positioned(right:5,bottom:5,child:CircleAvatar(
+                     radius:13,backgroundColor:colors.surface,
+                     child:Icon(Icons.image_search,size:17,color:colors.primary))),
+                 ])))))),
+           const SizedBox(height:10),
+         ],
+         Row(children:[
+           const Icon(Icons.fact_check_outlined,size:18),
+           const SizedBox(width:6),
+           Expanded(child:Text('원본 후보 ${list.length}건',
+             style:const TextStyle(fontWeight:FontWeight.w700))),
+           Text(verifiedCount>0?'검증 또는 직접 확인 ${verifiedCount}건':'자동 확인 0건',
+             style:TextStyle(fontSize:12,color:colors.onSurfaceVariant)),
+         ]),
+         const SizedBox(height:8),
+         if(list.isEmpty)
+           Padding(padding:const EdgeInsets.symmetric(vertical:12),
+             child:Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
+               Icon(Icons.search_off,color:colors.onSurfaceVariant),
+               const SizedBox(width:10),
+               Expanded(child:Text('일치하는 원본 후보를 아직 못 찾았어요. '
+                 '웹 이미지에 색인되지 않았을 수 있어요. 아래 다른 방법도 이용할 수 있어요.',
+                 style:TextStyle(fontSize:13,color:colors.onSurfaceVariant))),
+             ])),
+         for(final x in visible)candidateTile(v,x),
+         if(list.length>3)Align(alignment:Alignment.center,child:TextButton.icon(
+           onPressed:()=>setState((){
+             if(all){shownAllCandidates.remove(v.id);}else{shownAllCandidates.add(v.id);}
+           }),
+           icon:Icon(all?Icons.expand_less:Icons.expand_more),
+           label:Text(all?'접기':'나머지 ${list.length-3}건 더 보기'))),
+         if(selected!=null)...[
+           const SizedBox(height:6),
+           SizedBox(width:double.infinity,child:FilledButton.icon(
+             onPressed:busy?null:()=>create(v),
+             icon:const Icon(Icons.movie_creation_outlined),
+             label:const Text('선택한 원본으로 영상 제작'))),
+         ],
+         ExpansionTile(
+           key:PageStorageKey<String>('options_${v.id}'),
+           tilePadding:EdgeInsets.zero,childrenPadding:EdgeInsets.zero,
+           title:const Text('다른 방법 · 상세 내역',style:TextStyle(fontSize:13,fontWeight:FontWeight.w600)),
+           leading:const Icon(Icons.tune,size:19),
+           children:[
+             Wrap(spacing:8,runSpacing:6,children:[
+               OutlinedButton.icon(onPressed:busy?null:()=>search(v,manual:true),
+                 icon:const Icon(Icons.video_file_outlined,size:17),
+                 label:const Text('내 영상으로 검색')),
+               OutlinedButton.icon(onPressed:busy?null:()=>addOrigin(v),
+                 icon:const Icon(Icons.link,size:17),
+                 label:const Text('후보 링크 추가')),
+             ]),
+             if(state.diagnostics[v.id]?.isNotEmpty==true)
+               Padding(padding:const EdgeInsets.only(top:8),
+                 child:SelectableText(state.diagnostics[v.id]!,
+                   style:TextStyle(fontSize:12,height:1.4,color:colors.onSurfaceVariant))),
+             if(rejected.isNotEmpty||captions.isNotEmpty)
+               Wrap(spacing:8,children:[
+                 if(rejected.isNotEmpty)TextButton(
+                   onPressed:busy?null:()async{
+                     setState(()=>state.rejected.remove(v.id));await save();
+                   },child:Text('원본 아님 제외 ${rejected.length}건 초기화')),
+                 if(captions.isNotEmpty)TextButton(
+                   onPressed:busy?null:()async{
+                     setState(()=>state.captioned.remove(v.id));await save();
+                   },child:Text('자막 있음 제외 ${captions.length}건 초기화')),
+               ]),
+             const Padding(padding:EdgeInsets.symmetric(vertical:8),
+               child:Text('이미지 검색 결과는 실제 동영상 검증과 다릅니다. '
+                 '검증되지 않은 영상은 제작에 사용하기 전에 직접 확인해 주세요.',
+                 style:TextStyle(fontSize:12))),
+           ]),
+       ])));
  }
  @override Widget build(BuildContext context){
   final selected=state.picked.where((v)=>v.eligibleForAutoSearch).toList();
