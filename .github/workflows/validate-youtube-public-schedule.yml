@@ -1,0 +1,48 @@
+name: Validate public and scheduled YouTube uploads
+on:
+  push:
+    branches: [feat/public-scheduled-batch-upload-20261105]
+    paths:
+      - 'tool/patch_youtube_public_schedule.py'
+      - 'tool/youtube_publish_plan.dart'
+      - 'tool/youtube_batch_publish_screen.dart'
+      - 'tool/youtube_schedule_tests.dart'
+      - '.github/workflows/validate-youtube-public-schedule.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tool/patch_youtube_public_schedule.py'
+      - 'tool/youtube_publish_plan.dart'
+      - 'tool/youtube_batch_publish_screen.dart'
+      - 'tool/youtube_schedule_tests.dart'
+      - '.github/workflows/validate-youtube-public-schedule.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply patch and unpack
+        run: |
+          python3 tool/patch_youtube_public_schedule.py
+          unzip -q shorts-studio-source.zip -d app
+          grep -q '^version: 0.21.22+81' app/pubspec.yaml
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Bootstrap app
+        working-directory: app
+        run: python3 tool/bootstrap.py
+      - name: Flutter analysis
+        working-directory: app
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Full Flutter tests
+        working-directory: app
+        run: flutter test
