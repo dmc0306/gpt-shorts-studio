@@ -6,6 +6,7 @@ import 'benchmark_stream.dart';
 import 'benchmark_oneclick.dart';
 import 'benchmark_duration.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'benchmark_data.dart';
 import 'bridge.dart';
 import 'editor.dart';
@@ -25,6 +26,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
  final framePreviews=<String,List<Uint8List>>{};
  bool busy=false,loading=true;
  String? activeVideoId;
+ final shownAllCandidates=<String>{};
  bool cancelled=false;
  OneClickExplorer? activeExplorer;
  BenchmarkStreamResolver? activeStream;
@@ -68,6 +70,92 @@ class _BenchmarkState extends State<BenchmarkScreen>{
   if(busy)return;setState(()=>busy=true);
   try{await action();await save();}catch(e){report('작업 실패: $e');}
   finally{if(mounted)setState(()=>busy=false);}
+ }
+ Future<void> exportBackup()async{
+   try{
+     // Exports only BenchState; encrypted API credentials and downloaded
+     // media are intentionally not included in this copyable JSON.
+     final content=jsonEncode(state.toJson());
+     await Clipboard.setData(ClipboardData(text:content));
+     if(!mounted)return;
+     await showDialog<void>(context:context,builder:(ctx)=>AlertDialog(
+       title:const Text('검색 기록 백업 복사 완료'),
+       content:const Text('채널, 선정 영상, 원본 후보 및 제외 기록을 클립보드에 복사했어요. '
+         '메모나 개인 저장소에 붙여넣어 보관하세요. 앱을 삭제하면 앱 내부 기록은 지워질 수 있어요. '
+         'API 키와 영상 파일은 백업에 포함되지 않습니다.'),
+       actions:[FilledButton(onPressed:()=>Navigator.pop(ctx),child:const Text('확인'))]));
+   }catch(e){report('백업 복사 실패: $e');}
+ }
+ Future<void> restoreBackup()async{
+   if(busy)return;
+   try{
+     final clip=await Clipboard.getData(Clipboard.kTextPlain);
+     final raw=clip?.text?.trim()??'';
+     if(raw.isEmpty||raw.length>1000000)throw const FormatException('클립보드에 유효한 백업 텍스트가 없습니다.');
+     final decoded=jsonDecode(raw);
+     if(decoded is! Map||decoded['channels'] is! Map||decoded['top'] is! Map){
+       throw const FormatException('Short Studio 검색 기록 백업이 아닙니다.');
+     }
+     final candidate=BenchState.fromJson(decoded);
+     if(!mounted)return;
+     final confirm=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(
+       title:const Text('검색 기록 복원'),
+       content:Text('백업에서 채널 ${candidate.channels.length}개와 '
+         '선정 기록 ${candidate.selected.length}개를 찾았어요.\\n\\n'
+         '현재 앱의 검색 기록을 이 백업으로 교체합니다. '
+         '저장된 API 키와 제작한 영상 파일에는 영향을 주지 않습니다.'),
+       actions:[TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('취소')),
+         FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('기록 복원'))]));
+     if(confirm!=true||!mounted)return;
+     setState((){
+       state=candidate;
+       framePreviews.clear();
+       shownAllCandidates.clear();
+     });
+     await save();
+     report('검색 기록을 복원했어요. API 키가 없다면 다시 등록해 주세요.');
+   }catch(e){report('백업 복원 실패: $e');}
+ }
+ Future<void> removeChannel(String id,String title)async{
+   if(busy)return;
+   final accepted=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(
+     title:const Text('채널을 목록에서 제외할까요?'),
+     content:Text('「$title」을 수집 대상에서 숨깁니다. '
+       '이미 검색한 후보와 제작 파일은 삭제하지 않습니다.'),
+     actions:[TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('취소')),
+       FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('채널 제외'))]));
+   if(accepted!=true||!mounted)return;
+   setState(()=>state.channels.remove(id));
+   await save();
+   if(!mounted)return;
+   ScaffoldMessenger.of(context).hideCurrentSnackBar();
+   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+     content:Text('「$title」 채널을 제외했어요.'),
+     action:SnackBarAction(label:'실행 취소',onPressed:(){
+       if(!mounted)return;
+       setState(()=>state.channels[id]=title);
+       save();
+     })));
+ }
+ Future<void> drawRandom({bool searchImmediately=false})async{
+   if(busy)return;
+   final pool=<BenchVideo>[];
+   for(final key in state.channels.keys){
+     for(final video in state.top[key]??<BenchVideo>[]){
+       if(video.eligibleForAutoSearch&&!state.seen.contains(video.id))pool.add(video);
+     }
+   }
+   if(pool.isEmpty){
+     report('선정할 새 쇼츠가 없어요. 상단의 영상 목록 갱신을 실행해 주세요.');
+     return;
+   }
+   final video=pool[Random.secure().nextInt(pool.length)];
+   setState((){
+     state.selected..clear()..add(video.id);
+     state.seen.add(video.id);
+   });
+   await save();
+   if(searchImmediately)await search(video,continuous:true);
  }
  Future<void> scan()async=>run(()async{
   final client=BenchApi(keyText.text.trim());
