@@ -128,6 +128,72 @@ class VideoMatch {
     m.matched>=3&&m.distinctCandidate>=3&&m.best<=5;
 }
 
+/// Compare a user-selected local video against the benchmark reference.
+/// The native video picker returns OCR-screened frames; these establish only
+/// visual similarity of sampled content, never caption freedom of the full
+/// video or a connection between the local file and a remote TikTok URL.
+class LocalVideoProof {
+  static ({int matched,int best,int referenceScenes,int candidateScenes,bool lengthOk})
+      compare(List<dynamic> reference,List<dynamic> selected){
+    List<({int time,String hash})> samples(List<dynamic> values){
+      final accepted=<({int time,String hash})>[];
+      for(final value in values){
+        if(value is! Map||value['hash'] is! String)continue;
+        final hash=value['hash'] as String;
+        final time=(value['timeMs'] as num?)?.toInt();
+        if(time==null||(value['contrast'] as num? ?? 0)<18||
+            VideoMatch.distance(hash,hash)!=0)continue;
+        accepted.add((time:time,hash:hash));
+      }
+      accepted.sort((a,b)=>a.time.compareTo(b.time));
+      return accepted;
+    }
+    final refs=samples(reference),candidates=samples(selected);
+    final a=reference.isNotEmpty&&reference.first is Map
+      ?((reference.first as Map)['durationMs'] as num?)?.toInt():null;
+    final b=selected.isNotEmpty&&selected.first is Map
+      ?((selected.first as Map)['durationMs'] as num?)?.toInt():null;
+    final lengthOk=a!=null&&b!=null&&a>0&&b>0&&
+      BenchmarkDuration.similar((a/1000).round(),(b/1000).round());
+    if(!lengthOk||refs.length<3||candidates.length<3){
+      return(matched:0,best:64,referenceScenes:refs.length,
+        candidateScenes:candidates.length,lengthOk:lengthOk);
+    }
+    final edges=<({int i,int j,int distance})>[];
+    for(var i=0;i<refs.length;i++)for(var j=0;j<candidates.length;j++){
+      final d=VideoMatch.distance(refs[i].hash,candidates[j].hash);
+      if(d<=8)edges.add((i:i,j:j,distance:d));
+    }
+    final counts=List<int>.filled(edges.length,1);
+    final sums=List<int>.generate(edges.length,(i)=>edges[i].distance);
+    var best=64,matching=0;
+    for(var i=0;i<edges.length;i++){
+      final current=edges[i];
+      best=current.distance<best?current.distance:best;
+      for(var j=0;j<i;j++){
+        final prior=edges[j];
+        if(prior.i>=current.i||prior.j>=current.j||
+           refs[current.i].time-refs[prior.i].time<600||
+           candidates[current.j].time-candidates[prior.j].time<600||
+           VideoMatch.distance(refs[current.i].hash,refs[prior.i].hash)<10||
+           VideoMatch.distance(candidates[current.j].hash,candidates[prior.j].hash)<10){
+          continue;
+        }
+        final next=counts[j]+1;
+        final newSum=sums[j]+current.distance;
+        if(next>counts[i]||(next==counts[i]&&newSum<sums[i])){
+          counts[i]=next;sums[i]=newSum;
+        }
+      }
+      if(counts[i]>matching)matching=counts[i];
+    }
+    return(matched:matching,best:best,referenceScenes:refs.length,
+      candidateScenes:candidates.length,lengthOk:lengthOk);
+  }
+  static bool strong(({int matched,int best,int referenceScenes,int candidateScenes,bool lengthOk}) p)=>
+    p.lengthOk&&p.matched>=3&&p.best<=5;
+}
+
 /// OCR is a screening signal, not proof that the entire clip is caption-free.
 /// Short-lived creator captions may appear in only one sampled scene.
 class OverlayCheck {
