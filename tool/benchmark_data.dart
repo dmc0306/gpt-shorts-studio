@@ -72,6 +72,10 @@ class BenchState {
   final top=<String,List<BenchVideo>>{},scanned=<String,int>{},complete=<String,bool>{};
   final seen=<String>{},selected=<String>[];
   final origins=<String,List<BenchOrigin>>{},chosen=<String,String>{},rights=<String,String>{},proof=<String,String>{};
+  /// User confirmed the post shows matching footage; not caption-free proof.
+  final matchedByUser=<String,String>{};
+  /// On-device sampled-frame similarity; not remote URL proof.
+  final localSceneChecks=<String,String>{};
   /// User supplied, not an automated frame match.
   final confirmed=<String,String>{...benchmarkGroundTruth};
   /// Explicitly rejected source links for this benchmark video.
@@ -83,6 +87,7 @@ class BenchState {
     'scanned':scanned,'complete':complete,'seen':seen.toList(),'selected':selected,
     'origins':origins.map((k,v)=>MapEntry(k,v.map((e)=>e.toJson()).toList())),
     'chosen':chosen,'rights':rights,'proof':proof,
+    'matchedByUser':matchedByUser,'localSceneChecks':localSceneChecks,
     'confirmed':confirmed,
     'rejected':rejected.map((k,v)=>MapEntry(k,v.toList())),
     'captioned':captioned.map((k,v)=>MapEntry(k,v.toList())),
@@ -129,6 +134,22 @@ class BenchState {
       if(source is Map){
         source.forEach((k,v){if(k is String&&v is String)target[k]=v;});
       }
+    }
+    if(raw['matchedByUser'] is Map){
+      (raw['matchedByUser'] as Map).forEach((k,v){
+        if(k is String&&v is String&&RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(k)){
+          final safe=normalOrigin(v);
+          if(safe!=null)b.matchedByUser[k]=safe;
+        }
+      });
+    }
+    if(raw['localSceneChecks'] is Map){
+      (raw['localSceneChecks'] as Map).forEach((k,v){
+        if(k is String&&v is String&&v.length<=300&&
+            RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(k)){
+          b.localSceneChecks[k]=v;
+        }
+      });
     }
     if(raw['confirmed'] is Map){
       (raw['confirmed'] as Map).forEach((k,v){

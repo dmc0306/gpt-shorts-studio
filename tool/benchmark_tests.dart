@@ -422,6 +422,48 @@ void main(){
    restored.captioned.remove('AbcDefGhI12');
    expect(restored.rejected['AbcDefGhI12'],isNotEmpty);
  });
+ test('Local candidate file passes only 3 different chronological video scenes',(){
+   final reference=[
+     {'hash':'aaaaaaaaaaaaaaaa','contrast':40,'timeMs':1000,'durationMs':52000},
+     {'hash':'5555555555555555','contrast':41,'timeMs':3000,'durationMs':52000},
+     {'hash':'f0f0f0f0f0f0f0f0','contrast':42,'timeMs':5000,'durationMs':52000},
+   ];
+   final actual=[
+     {'hash':'aaaaaaaaaaaaaaaa','contrast':40,'timeMs':1200,'durationMs':51000},
+     {'hash':'5555555555555555','contrast':41,'timeMs':3200,'durationMs':51000},
+     {'hash':'f0f0f0f0f0f0f0f0','contrast':42,'timeMs':5200,'durationMs':51000},
+   ];
+   final good=LocalVideoProof.compare(reference,actual);
+   expect(good.lengthOk,true);
+   expect(good.matched,3);
+   expect(LocalVideoProof.strong(good),true);
+   final reversed=LocalVideoProof.compare(reference,actual.reversed.toList().asMap().entries
+     .map((e)=>{...e.value,'timeMs':e.key*2000+1200}).toList());
+   expect(LocalVideoProof.strong(reversed),false);
+   final wrongLength=LocalVideoProof.compare(reference,[
+     for(final e in actual){...e,'durationMs':120000}
+   ]);
+   expect(wrongLength.lengthOk,false);
+   expect(LocalVideoProof.strong(wrongLength),false);
+   final repeated=LocalVideoProof.compare(reference,[
+     for(final e in actual){...e,'hash':'aaaaaaaaaaaaaaaa'}
+   ]);
+   expect(LocalVideoProof.strong(repeated),false);
+ });
+ test('User-recognized TikTok remains a lead rather than automatic clean source',(){
+   const id='ABCDEFGHIJK';
+   const url='https://www.tiktok.com/@creator/video/1234567890123456789';
+   final state=BenchState();
+   state.matchedByUser[id]=url;
+   state.localSceneChecks[id]='로컬 파일 장면 3개 시간순 일치';
+   expect(state.confirmed[id],isNull);
+   expect(state.chosen[id],isNull);
+   final restored=BenchState.fromJson(jsonDecode(jsonEncode(state.toJson())) as Map);
+   expect(restored.matchedByUser[id],url);
+   expect(restored.localSceneChecks[id],contains('장면 3개'));
+   expect(restored.confirmed[id],isNull);
+   expect(restored.chosen[id],isNull);
+ });
  test('Rejected links persist per benchmark and can be cleared',(){
    final state=BenchState();
    state.rejected['AbcDefGhI12']={

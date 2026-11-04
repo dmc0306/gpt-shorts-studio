@@ -17,7 +17,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Package UI redesign on isolated app ZIP
         run: |
-          python3 tool/patch_benchmark_ux.py
+          if unzip -p shorts-studio-source.zip pubspec.yaml | grep -Fq 'version: 0.21.19+78'; then
+            python3 tool/patch_benchmark_ux.py
+          else
+            echo "Existing source is already newer than the UX patch; validate without overwriting."
+          fi
           unzip -q shorts-studio-source.zip -d app
       - uses: actions/setup-java@v4
         with:

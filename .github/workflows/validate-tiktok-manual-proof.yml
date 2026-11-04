@@ -1,0 +1,40 @@
+name: Validate TikTok candidate match recovery
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tool/benchmark_ui.dart'
+      - 'tool/benchmark_data.dart'
+      - 'tool/benchmark_oneclick.dart'
+      - 'tool/benchmark_tests.dart'
+      - 'tool/patch_tiktok_manual_proof.py'
+      - '.github/workflows/validate-tiktok-manual-proof.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply candidate proof source
+        run: |
+          python3 tool/patch_tiktok_manual_proof.py
+          unzip -q shorts-studio-source.zip -d app
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Bootstrap
+        working-directory: app
+        run: python3 tool/bootstrap.py
+      - name: Flutter analysis
+        working-directory: app
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Regression tests
+        working-directory: app
+        run: flutter test

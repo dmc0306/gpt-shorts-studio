@@ -24,6 +24,9 @@ class _BenchmarkState extends State<BenchmarkScreen>{
  BenchState state=BenchState();
  String message='';
  final framePreviews=<String,List<Uint8List>>{};
+ /// In-memory reference hashes needed for an optional local-file check.
+ /// Raw video and credentials are not persisted in history.
+ final referenceFrames=<String,List<dynamic>>{};
  bool busy=false,loading=true;
  String? activeVideoId;
  final shownAllCandidates=<String>{};
@@ -110,6 +113,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
      setState((){
        state=candidate;
        framePreviews.clear();
+       referenceFrames.clear();
        shownAllCandidates.clear();
      });
      await save();
@@ -207,6 +211,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
       }
     }
     if(frames==null||frames.isEmpty){report('영상 프레임 추출 실패');return;}
+    referenceFrames[v.id]=frames;
     final previews=<Uint8List>[];
     for(final frame in frames){
       if(frame is Map&&frame['content'] is String){
@@ -442,11 +447,111 @@ class _BenchmarkState extends State<BenchmarkScreen>{
      state.origins[v.id]?.removeWhere((candidate)=>candidate.url==origin.url);
      if(state.chosen[v.id]==origin.url)state.chosen.remove(v.id);
      if(state.confirmed[v.id]==origin.url)state.confirmed.remove(v.id);
+     if(state.matchedByUser[v.id]==origin.url){
+       state.matchedByUser.remove(v.id);
+       state.localSceneChecks.remove(v.id);
+     }
    });
    await save();
    report(captioned
      ?'자막이 포함된 후보로 제외했어요. 이 주소는 다음 검색에서 건너뛰어요.'
      :'원본이 아닌 후보로 제외했어요. 이 주소는 다음 검색에서 건너뛰어요.');
+ }
+ Future<void> confirmFootageMatch(BenchVideo v,BenchOrigin origin)async{
+   if(busy)return;
+   final accepted=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(
+     title:const Text('같은 영상이라는 점을 확인했나요?'),
+     content:Text('TikTok 링크의 장면이 기준 YouTube 쇼츠와 동일하다고 '
+       '직접 확인한 사실만 저장해요.\\n\\n'
+       '• 자동 프레임 검사 통과를 의미하지 않습니다.\\n'
+       '• 기존 자막이 없는지는 아직 모릅니다.\\n'
+       '• 원제작자와 이용 권한도 별도로 확인해야 합니다.\\n\\n'
+       '${origin.url}'),
+     actions:[
+       TextButton(onPressed:()=>Navigator.pop(ctx,false),
+         child:const Text('취소')),
+       FilledButton(onPressed:()=>Navigator.pop(ctx,true),
+         child:const Text('같은 영상으로 기록')),
+     ]));
+   if(accepted!=true||!mounted)return;
+   setState((){
+     state.matchedByUser[v.id]=origin.url;
+     state.localSceneChecks.remove(v.id);
+     state.rejected[v.id]?.remove(origin.url);
+     state.captioned[v.id]?.remove(origin.url);
+   });
+   await save();
+   report('이 TikTok 게시물을 같은 영상으로 기록했어요. 다운로드 오류 10204와 '
+     '무관하게 검색 성공 사례는 보존하지만, 자동 검증·자막 없음으로 표시하지 않아요.');
+ }
+ Future<void> verifyCandidateFromFile(BenchVideo v,BenchOrigin origin)async{
+   if(busy)return;
+   cancelled=false;
+   if(mounted)setState(()=>activeVideoId=v.id);
+   try{
+     await run(()async{
+       var refs=referenceFrames[v.id];
+       if(refs==null||refs.length<3){
+         report('기준 쇼츠의 장면 정보 확보 중');
+         final path=await Native.call<String>('benchmarkStreamCachePath',{'id':v.id});
+         if(path==null)throw StateError('기준 영상 임시 경로 확보 실패');
+         try{
+           activeStream=BenchmarkStreamResolver();
+           await activeStream!.download(v.id,path,(m)=>report(m));
+           if(cancelled)throw const OneClickCancelled();
+           refs=await Native.call<List<dynamic>>('benchmarkExtractFramesFromCache',{'id':v.id});
+           if(refs==null||refs.length<3)throw StateError('기준 영상의 비교 장면 부족');
+           referenceFrames[v.id]=refs;
+         }finally{
+           activeStream=null;
+           try{final file=File(path);if(await file.exists())await file.delete();}catch(_){}
+         }
+       }
+       if(cancelled)throw const OneClickCancelled();
+       report('TikTok 후보를 휴대폰에 합법적으로 보유한 경우, 해당 영상 파일을 선택해 주세요.');
+       final sample=await Native.call<List<dynamic>>('benchmarkPickFrames');
+       if(sample==null){report('후보 영상 파일 선택을 취소했어요.');return;}
+       final proof=LocalVideoProof.compare(refs!,sample);
+       if(!LocalVideoProof.strong(proof)){
+         report(proof.lengthOk
+           ?'로컬 영상 장면 비교 미통과 · 순서대로 유사한 장면 ${proof.matched}개 · '
+            '최소 3개 필요. 자막 위치나 편집 차이로 일치 영상도 실패할 수 있어요.'
+           :'후보와 기준 쇼츠의 영상 길이가 달라 자동 비교를 보류했어요.');
+         return;
+       }
+       if(!mounted)return;
+       final tied=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(
+         title:const Text('영상 장면 비교 통과'),
+         content:Text('휴대폰에서 선택한 파일은 기준 쇼츠와 시간 순서가 맞는 '
+           '서로 다른 장면 ${proof.matched}개가 일치했어요.\\n\\n'
+           '선택한 파일이 현재 TikTok 게시물에서 얻은 영상인지 '
+           '직접 확인해 주세요. 자동으로 두 대상을 연결할 수는 없습니다.\\n\\n'
+           '또한 영상 전체의 자막 유무와 이용 권한은 검사하지 않았어요.'),
+         actions:[
+           TextButton(onPressed:()=>Navigator.pop(ctx,false),
+             child:const Text('링크 연결 안 함')),
+           FilledButton(onPressed:()=>Navigator.pop(ctx,true),
+             child:const Text('같은 TikTok 영상으로 기록')),
+         ]));
+       if(tied!=true||!mounted){
+         report('로컬 파일의 장면 일치만 확인했어요. TikTok 링크와는 연결하지 않았어요.');
+         return;
+       }
+       setState((){
+         state.matchedByUser[v.id]=origin.url;
+         state.localSceneChecks[v.id]=
+           '로컬 파일 장면 ${proof.matched}개 시간순 일치 · 해시 최저 거리 ${proof.best}/64';
+         state.rejected[v.id]?.remove(origin.url);
+         state.captioned[v.id]?.remove(origin.url);
+       });
+       await save();
+       report('TikTok 후보를 같은 영상으로 기록했어요. 로컬 파일 장면 비교 통과 · '
+         '기존 자막 및 원제작자/이용 권한은 계속 별도 확인해야 해요.');
+     });
+   }finally{
+     activeStream=null;
+     if(mounted)setState(()=>activeVideoId=null);
+   }
  }
  Future<void> confirmOrigin(BenchVideo v,BenchOrigin origin)async{
    if(busy)return;
@@ -464,6 +569,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
    if(confirmed!=true||!mounted)return;
    setState((){
      state.confirmed[v.id]=origin.url;
+     state.matchedByUser[v.id]=origin.url;
      state.chosen[v.id]=origin.url;
      state.rejected[v.id]?.remove(origin.url);
      state.captioned[v.id]?.remove(origin.url);
@@ -476,6 +582,9 @@ class _BenchmarkState extends State<BenchmarkScreen>{
    final autoVerified=x.source=='실제 동영상 교차확인';
    final manuallyVerified=x.source=='사용자 제공 원본';
    final verified=autoVerified||manuallyVerified;
+   final footageMatched=state.matchedByUser[v.id]==x.url;
+   final fileProof=footageMatched?state.localSceneChecks[v.id]:null;
+   final isTikTok=(Uri.tryParse(x.url)?.host.toLowerCase().endsWith('tiktok.com')??false);
    final captioned=x.source=='자막 검출 후보';
    final maybeCaptioned=x.source=='자막 확인 필요 후보';
    final selected=state.chosen[v.id]==x.url;
@@ -484,11 +593,15 @@ class _BenchmarkState extends State<BenchmarkScreen>{
    final provider=host.contains('instagram')?'Instagram':
      host.contains('tiktok')?'TikTok':
      host.contains('youtube')||host=='youtu.be'?'YouTube':'외부 링크';
-   final status=verified?'원본 확인됨':captioned?'기존 자막 감지':
+   final status=verified?'원본 확인됨':
+     footageMatched?(fileProof!=null?'파일 장면 일치 · 자막 미검증':'사용자 일치 확인 · 자막 미검증'):
+     captioned?'기존 자막 감지':
      maybeCaptioned?'자막 확인 필요':'영상 미검증';
    final statusColor=verified?colors.primary:
-     captioned||maybeCaptioned?colors.error:colors.onSurfaceVariant;
+     captioned||maybeCaptioned?colors.error:
+     footageMatched?colors.tertiary:colors.onSurfaceVariant;
    final statusIcon=verified?Icons.verified_outlined:
+     footageMatched?Icons.fact_check_outlined:
      captioned||maybeCaptioned?Icons.closed_caption_outlined:Icons.help_outline;
    return Card(
      margin:const EdgeInsets.only(bottom:10),
@@ -509,6 +622,15 @@ class _BenchmarkState extends State<BenchmarkScreen>{
          const SizedBox(height:6),
          Text(x.evidence,maxLines:3,overflow:TextOverflow.ellipsis,
            style:TextStyle(fontSize:12,height:1.4,color:colors.onSurfaceVariant)),
+         if(fileProof!=null)...[
+           const SizedBox(height:4),
+           Text(fileProof,style:TextStyle(fontSize:12,color:colors.tertiary)),
+         ],
+         if(isTikTok&&!verified&&!footageMatched&&x.evidence.contains('10204'))...[
+           const SizedBox(height:5),
+           Text('TikTok 영상 추출 실패(10204) · 영상 불일치 판정은 아닙니다.',
+             style:TextStyle(fontSize:12,color:colors.onSurfaceVariant)),
+         ],
          const SizedBox(height:6),
          Wrap(spacing:4,runSpacing:2,crossAxisAlignment:WrapCrossAlignment.center,children:[
            TextButton.icon(
@@ -523,10 +645,18 @@ class _BenchmarkState extends State<BenchmarkScreen>{
                },
                icon:Icon(selected?Icons.check:Icons.movie_creation_outlined,size:16),
                label:Text(selected?'선택됨':'이 원본 사용')),
+           if(!verified&&!footageMatched)
+             TextButton.icon(onPressed:busy?null:()=>confirmFootageMatch(v,x),
+               icon:const Icon(Icons.check_circle_outline,size:16),
+               label:const Text('같은 영상 확인')),
+           if(isTikTok&&!verified)
+             TextButton.icon(onPressed:busy?null:()=>verifyCandidateFromFile(v,x),
+               icon:const Icon(Icons.video_file_outlined,size:16),
+               label:const Text('영상 파일로 비교')),
            if(!verified)
              TextButton.icon(onPressed:busy?null:()=>confirmOrigin(v,x),
                icon:const Icon(Icons.bookmark_add_outlined,size:16),
-               label:const Text('직접 확인·저장')),
+               label:const Text('자막·권리까지 확인')),
            if(!manuallyVerified)
              PopupMenuButton<String>(
                tooltip:'후보 관리',
@@ -544,16 +674,23 @@ class _BenchmarkState extends State<BenchmarkScreen>{
    final userOriginal=state.confirmed[v.id];
    final rejected=state.rejected[v.id]??const <String>{};
    final captions=state.captioned[v.id]??const <String>{};
+   final userMatched=state.matchedByUser[v.id];
    final hidden=<String>{...rejected,...captions};
    final candidates=state.origins[v.id]??<BenchOrigin>[];
    final list=<BenchOrigin>[
      if(userOriginal!=null)BenchOrigin(userOriginal,
        '사용자가 직접 확인한 원본 · 검색 성공 통계에는 포함되지 않음','사용자 제공 원본'),
-     ...candidates.where((x)=>x.url!=userOriginal&&!hidden.contains(x.url))
+     if(userMatched!=null&&userMatched!=userOriginal&&!hidden.contains(userMatched))
+       BenchOrigin(userMatched,
+         '같은 화면이라는 사용자 확인 기록 · 자동 장면/무자막 검증은 별도',
+         '동일 영상 사용자 확인'),
+     ...candidates.where((x)=>x.url!=userOriginal&&
+       x.url!=userMatched&&!hidden.contains(x.url))
    ];
    int weight(BenchOrigin item){
      if(item.source=='사용자 제공 원본')return 0;
      if(item.source=='실제 동영상 교차확인')return 1;
+     if(item.source=='동일 영상 사용자 확인')return 2;
      if(item.source=='자막 검출 후보'||item.source=='자막 확인 필요 후보')return 3;
      return 2;
    }
@@ -562,6 +699,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
    final all=shownAllCandidates.contains(v.id);
    final visible=all?list:list.take(3).toList();
    final verifiedCount=list.where((c)=>weight(c)<2).length;
+   final userMatchCount=list.where((c)=>c.source=='동일 영상 사용자 확인').length;
    final theme=Theme.of(context);
    final colors=theme.colorScheme;
    return Card(
@@ -637,7 +775,8 @@ class _BenchmarkState extends State<BenchmarkScreen>{
            const SizedBox(width:6),
            Expanded(child:Text('원본 후보 ${list.length}건',
              style:const TextStyle(fontWeight:FontWeight.w700))),
-           Text(verifiedCount>0?'검증 또는 직접 확인 ${verifiedCount}건':'자동 확인 0건',
+           Text(verifiedCount>0?'원본 확인 ${verifiedCount}건':
+             userMatchCount>0?'영상 일치 확인 · 자막 미검증':'자동 확인 0건',
              style:TextStyle(fontSize:12,color:colors.onSurfaceVariant)),
          ]),
          const SizedBox(height:8),
@@ -694,8 +833,9 @@ class _BenchmarkState extends State<BenchmarkScreen>{
                    },child:Text('자막 있음 제외 ${captions.length}건 초기화')),
                ]),
              const Padding(padding:EdgeInsets.symmetric(vertical:8),
-               child:Text('이미지 검색 결과는 실제 동영상 검증과 다릅니다. '
-                 '검증되지 않은 영상은 제작에 사용하기 전에 직접 확인해 주세요.',
+               child:Text('이미지 일치, 동일 영상 사용자 확인, 실제 프레임 자동 검증, '
+                 '자막 없는 원본 확인은 서로 다른 상태예요. TikTok 추출 오류가 발생하면 '
+                 '파일로 비교하거나 동일 영상을 직접 기록할 수 있습니다.',
                  style:TextStyle(fontSize:12))),
            ]),
        ])));
