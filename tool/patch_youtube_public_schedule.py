@@ -236,10 +236,10 @@ change(p,"        SwitchListTile.adaptive(contentPadding: EdgeInsets.zero, title
 """        const Divider(height: 28),
         const Text('업로드 공개 방식',style:TextStyle(fontSize:19,fontWeight:FontWeight.w600)),
         const SizedBox(height:8),
-        DropdownButtonFormField<String>(
-          key:ValueKey('publish_${p.publishMode}'),
-          initialValue:p.publishMode,
-          decoration:const InputDecoration(labelText:'새 MP4 공개 범위'),
+        const Text('새 MP4 공개 범위'),
+        DropdownButton<String>(
+          value:p.publishMode,
+          isExpanded:true,
           items:const [
             DropdownMenuItem(value:'private',child:Text('비공개 (기본값)')),
             DropdownMenuItem(value:'public',child:Text('업로드 후 즉시 전체 공개')),
