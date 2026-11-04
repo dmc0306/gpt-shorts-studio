@@ -92,7 +92,8 @@ void main(){
       return http.Response('',400);
     });
     final uploader=YouTubeUpload(client:client,token:()async=>'test-token',
-      readState:()async=>state,writeState:(map)async{state..clear()..addAll(map);});
+      readState:()async=>Map<String,dynamic>.from(state),
+      writeState:(map)async{state..clear()..addAll(map);});
     final id=await uploader.upload(file:file,
       email:'me@example.com',channelId:'UCaaaaaaaaaaaaaaaaaaaaaa',
       title:'Original video',description:'Authorized upload',
