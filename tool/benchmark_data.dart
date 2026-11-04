@@ -72,13 +72,11 @@ class BenchState {
   final top=<String,List<BenchVideo>>{},scanned=<String,int>{},complete=<String,bool>{};
   final seen=<String>{},selected=<String>[];
   final origins=<String,List<BenchOrigin>>{},chosen=<String,String>{},rights=<String,String>{},proof=<String,String>{};
-  /// Human confirmed that the found post shows the same footage.
-  /// This does NOT establish an uncaptioned source or usage rights.
+  /// User confirmed the post shows matching footage; not caption-free proof.
   final matchedByUser=<String,String>{};
-  /// Optional evidence from comparing a user-selected local video file.
-  /// Such a file has not independently been tied to the remote URL.
+  /// On-device sampled-frame similarity; not remote URL proof.
   final localSceneChecks=<String,String>{};
-  /// User supplied uncaptioned source, not an automated frame match.
+  /// User supplied, not an automated frame match.
   final confirmed=<String,String>{...benchmarkGroundTruth};
   /// Explicitly rejected source links for this benchmark video.
   final rejected=<String,Set<String>>{};
@@ -139,204 +137,16 @@ class BenchState {
     }
     if(raw['matchedByUser'] is Map){
       (raw['matchedByUser'] as Map).forEach((k,v){
-        if(k is String&&v is String&&RegExp(r'^[A-Za-z0-9_-]{11}
-      (raw['confirmed'] as Map).forEach((k,v){
         if(k is String&&v is String&&RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(k)){
           final safe=normalOrigin(v);
-          if(safe!=null)b.confirmed[k]=safe;
-        }
-      });
-    }
-    if(raw['rejected'] is Map){
-      (raw['rejected'] as Map).forEach((k,v){
-        if(k is! String||v is! List)return;
-        final valid=v.whereType<String>().map(normalOrigin).whereType<String>().toSet();
-        if(valid.isNotEmpty)b.rejected[k]=valid;
-      });
-    }
-    if(raw['captioned'] is Map){
-      (raw['captioned'] as Map).forEach((k,v){
-        if(k is! String||v is! List)return;
-        final safe=v.whereType<String>().map(normalOrigin).whereType<String>().toSet();
-        if(safe.isNotEmpty)b.captioned[k]=safe;
-      });
-    }
-    if(raw['diagnostics'] is Map){
-      (raw['diagnostics'] as Map).forEach((k,v){
-        if(k is String&&v is String)b.diagnostics[k]=v;
-      });
-    }
-    return b;
-  }
-  List<BenchVideo> get picked=>[for(final id in selected)for(final list in top.values)for(final v in list)if(v.id==id)v];
-  void draw(){
-    selected.clear();final rng=Random.secure();
-    for(final key in channels.keys){
-      final available=(top[key]??[]).where((v)=>v.eligibleForAutoSearch&&!seen.contains(v.id)).toList();
-      if(available.isEmpty)continue;
-      final v=available[rng.nextInt(available.length)];
-      selected.add(v.id);seen.add(v.id);
-    }
-  }
-}
-class BenchApi {
-  BenchApi(this.key,{http.Client? client}):client=client??http.Client();
-  final String key;
-  final http.Client client;
-  void close()=>client.close();
-  Future<Map> get(String path,Map<String,String> q)async{
-    if(key.isEmpty)throw StateError('YouTube Data API 키를 입력하세요.');
-    final response=await client.get(Uri.https('www.googleapis.com','/youtube/v3/$path',q),
-      headers:{'x-goog-api-key':key}).timeout(const Duration(seconds:25));
-    if(response.statusCode!=200)throw StateError('YouTube API HTTP ${response.statusCode} · API 키/권한/할당량을 확인하세요.');
-    return jsonDecode(response.body) as Map;
-  }
-  Future<({List<BenchVideo> top,int scanned,bool complete,String name})> ranking(String id,
-    {void Function(int)? progress,int pageLimit=120})async{
-    final c=await get('channels',{'part':'contentDetails,snippet','id':id});
-    if((c['items'] as List? ?? []).isEmpty)throw StateError('존재하지 않거나 공개되지 않은 채널 ID: $id');
-    final channel=(c['items'] as List).first as Map;
-    final name=(channel['snippet'] as Map?)?['title'] as String? ?? id;
-    final uploads=((channel['contentDetails'] as Map?)?['relatedPlaylists'] as Map?)?['uploads'] as String?;
-    if(uploads==null)throw StateError('업로드 재생목록이 없어요.');
-    final ids=<String>{};
-    String? next;var pages=0;
-    do{
-      final p=await get('playlistItems',{
-        'part':'contentDetails','playlistId':uploads,'maxResults':'50',
-        if(next!=null)'pageToken':next});
-      for(final item in p['items'] as List? ?? []){
-        if(item is Map&&item['contentDetails'] is Map){
-          final videoId=(item['contentDetails'] as Map)['videoId'];
-          if(videoId is String&&videoId.isNotEmpty)ids.add(videoId);
-        }
-      }
-      next=p['nextPageToken'] as String?;
-      pages++;progress?.call(pages);
-    }while(next!=null&&pages<pageLimit);
-    final list=ids.toList(),videos=<BenchVideo>[];
-    for(var i=0;i<list.length;i+=50){
-      final p=await get('videos',{'part':'snippet,statistics,contentDetails','id':list.skip(i).take(50).join(',')});
-      for(final row in p['items'] as List? ?? []){
-        if(row is! Map)continue;
-        final meta=row['snippet'],stats=row['statistics'],details=row['contentDetails'];
-        if(row['id'] is! String||meta is! Map||stats is! Map||details is! Map)continue;
-        final duration=BenchVideo.seconds(details['duration'] as String? ?? '');
-        if(duration<1||duration>BenchVideo.maxAutoSeconds)continue; // Strict duration prefilter, NOT proof of Shorts format.
-        videos.add(BenchVideo(row['id'] as String,id,name,meta['title'] as String? ?? '',
-          meta['description'] as String? ?? '',
-          int.tryParse(stats['viewCount']?.toString()??'')??0,duration,
-          meta['publishedAt'] as String? ?? ''));
-      }
-    }
-    videos.sort((a,b)=>b.views.compareTo(a.views));
-    return(top:videos.take(50).toList(),scanned:ids.length,complete:next==null,name:name);
-  }
-}
-).hasMatch(k)){
-          final link=normalOrigin(v);
-          if(link!=null)b.matchedByUser[k]=link;
+          if(safe!=null)b.matchedByUser[k]=safe;
         }
       });
     }
     if(raw['localSceneChecks'] is Map){
       (raw['localSceneChecks'] as Map).forEach((k,v){
         if(k is String&&v is String&&v.length<=300&&
-            RegExp(r'^[A-Za-z0-9_-]{11}
-      (raw['confirmed'] as Map).forEach((k,v){
-        if(k is String&&v is String&&RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(k)){
-          final safe=normalOrigin(v);
-          if(safe!=null)b.confirmed[k]=safe;
-        }
-      });
-    }
-    if(raw['rejected'] is Map){
-      (raw['rejected'] as Map).forEach((k,v){
-        if(k is! String||v is! List)return;
-        final valid=v.whereType<String>().map(normalOrigin).whereType<String>().toSet();
-        if(valid.isNotEmpty)b.rejected[k]=valid;
-      });
-    }
-    if(raw['captioned'] is Map){
-      (raw['captioned'] as Map).forEach((k,v){
-        if(k is! String||v is! List)return;
-        final safe=v.whereType<String>().map(normalOrigin).whereType<String>().toSet();
-        if(safe.isNotEmpty)b.captioned[k]=safe;
-      });
-    }
-    if(raw['diagnostics'] is Map){
-      (raw['diagnostics'] as Map).forEach((k,v){
-        if(k is String&&v is String)b.diagnostics[k]=v;
-      });
-    }
-    return b;
-  }
-  List<BenchVideo> get picked=>[for(final id in selected)for(final list in top.values)for(final v in list)if(v.id==id)v];
-  void draw(){
-    selected.clear();final rng=Random.secure();
-    for(final key in channels.keys){
-      final available=(top[key]??[]).where((v)=>v.eligibleForAutoSearch&&!seen.contains(v.id)).toList();
-      if(available.isEmpty)continue;
-      final v=available[rng.nextInt(available.length)];
-      selected.add(v.id);seen.add(v.id);
-    }
-  }
-}
-class BenchApi {
-  BenchApi(this.key,{http.Client? client}):client=client??http.Client();
-  final String key;
-  final http.Client client;
-  void close()=>client.close();
-  Future<Map> get(String path,Map<String,String> q)async{
-    if(key.isEmpty)throw StateError('YouTube Data API 키를 입력하세요.');
-    final response=await client.get(Uri.https('www.googleapis.com','/youtube/v3/$path',q),
-      headers:{'x-goog-api-key':key}).timeout(const Duration(seconds:25));
-    if(response.statusCode!=200)throw StateError('YouTube API HTTP ${response.statusCode} · API 키/권한/할당량을 확인하세요.');
-    return jsonDecode(response.body) as Map;
-  }
-  Future<({List<BenchVideo> top,int scanned,bool complete,String name})> ranking(String id,
-    {void Function(int)? progress,int pageLimit=120})async{
-    final c=await get('channels',{'part':'contentDetails,snippet','id':id});
-    if((c['items'] as List? ?? []).isEmpty)throw StateError('존재하지 않거나 공개되지 않은 채널 ID: $id');
-    final channel=(c['items'] as List).first as Map;
-    final name=(channel['snippet'] as Map?)?['title'] as String? ?? id;
-    final uploads=((channel['contentDetails'] as Map?)?['relatedPlaylists'] as Map?)?['uploads'] as String?;
-    if(uploads==null)throw StateError('업로드 재생목록이 없어요.');
-    final ids=<String>{};
-    String? next;var pages=0;
-    do{
-      final p=await get('playlistItems',{
-        'part':'contentDetails','playlistId':uploads,'maxResults':'50',
-        if(next!=null)'pageToken':next});
-      for(final item in p['items'] as List? ?? []){
-        if(item is Map&&item['contentDetails'] is Map){
-          final videoId=(item['contentDetails'] as Map)['videoId'];
-          if(videoId is String&&videoId.isNotEmpty)ids.add(videoId);
-        }
-      }
-      next=p['nextPageToken'] as String?;
-      pages++;progress?.call(pages);
-    }while(next!=null&&pages<pageLimit);
-    final list=ids.toList(),videos=<BenchVideo>[];
-    for(var i=0;i<list.length;i+=50){
-      final p=await get('videos',{'part':'snippet,statistics,contentDetails','id':list.skip(i).take(50).join(',')});
-      for(final row in p['items'] as List? ?? []){
-        if(row is! Map)continue;
-        final meta=row['snippet'],stats=row['statistics'],details=row['contentDetails'];
-        if(row['id'] is! String||meta is! Map||stats is! Map||details is! Map)continue;
-        final duration=BenchVideo.seconds(details['duration'] as String? ?? '');
-        if(duration<1||duration>BenchVideo.maxAutoSeconds)continue; // Strict duration prefilter, NOT proof of Shorts format.
-        videos.add(BenchVideo(row['id'] as String,id,name,meta['title'] as String? ?? '',
-          meta['description'] as String? ?? '',
-          int.tryParse(stats['viewCount']?.toString()??'')??0,duration,
-          meta['publishedAt'] as String? ?? ''));
-      }
-    }
-    videos.sort((a,b)=>b.views.compareTo(a.views));
-    return(top:videos.take(50).toList(),scanned:ids.length,complete:next==null,name:name);
-  }
-}
-).hasMatch(k)){
+            RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(k)){
           b.localSceneChecks[k]=v;
         }
       });
