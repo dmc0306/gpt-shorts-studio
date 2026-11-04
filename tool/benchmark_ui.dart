@@ -700,75 +700,229 @@ class _BenchmarkState extends State<BenchmarkScreen>{
            ]),
        ])));
  }
+
  @override Widget build(BuildContext context){
-  final selected=state.picked.where((v)=>v.eligibleForAutoSearch).toList();
-  final count=state.top.values.fold<int>(0,(a,v)=>
-    a+v.where((item)=>item.eligibleForAutoSearch).length);
-  return Scaffold(appBar:AppBar(title:const Text('벤치마킹 쇼츠 탐색')),
-   body:loading?const Center(child:CircularProgressIndicator()):
-   ListView(padding:const EdgeInsets.all(16),children:[
-    const Text('60초 이하 숏폼 후보만 선정 · 세로형 스트림 확인 · 자막 없는 원본 이미지 검색',style:TextStyle(fontSize:14)),
-    const SizedBox(height:12),
-    TextField(controller:keyText,obscureText:true,enableSuggestions:false,autocorrect:false,
-      decoration:const InputDecoration(labelText:'YouTube Data API v3 키 (암호화 저장)')),
-    TextButton(onPressed:busy?null:()=>run(()async{
-       await Native.call('saveBenchmarkApiKey',{'key':keyText.text.trim()});
-       report('YouTube Data API 키 저장 완료');
-           }),child:const Text('API 키 저장')),
-    const SizedBox(height:8),
-    TextField(controller:visionKeyText,obscureText:true,enableSuggestions:false,autocorrect:false,
-      decoration:const InputDecoration(labelText:'Cloud Vision Web Detection API 키',
-        helperText:'Cloud Vision API 활성화 필요 · 빈칸이면 YouTube API 키 사용')),
-    TextButton(onPressed:busy?null:()=>run(()async{
-       await Native.call('saveBenchmarkVisionKey',{'key':visionKeyText.text.trim()});
-       report('Vision 검색 키를 암호화 저장했어요.');
-     }),child:const Text('Vision API 키 저장')),
-    const Text('역이미지 검색으로 찾은 Instagram 등은 실제 영상/자막 자동 검증이 아니라 후보 링크입니다. YouTube·TikTok 영상은 접근 가능한 경우에만 장면과 자막을 검사하며, 자막 의심 후보는 자동 제작에서 제외합니다.',
-      style:TextStyle(fontSize:12)),
-    Text('채널 ${state.channels.length}개 · 순위 후보 $count개',style:const TextStyle(fontWeight:FontWeight.bold)),
-    Row(children:[
-     Expanded(child:TextField(controller:channelText,decoration:const InputDecoration(labelText:'채널 UC ID 추가'))),
-     IconButton(icon:const Icon(Icons.add),onPressed:busy?null:(){
-       final id=channelText.text.trim();
-       if(!RegExp(r'^UC[\w-]{22}$').hasMatch(id)){report('유효한 UC 채널 ID를 입력하세요.');return;}
-       setState(()=>state.channels[id]=id);channelText.clear();save();
-     })]),
-    for(final c in state.channels.entries.toList())ListTile(dense:true,contentPadding:EdgeInsets.zero,
-      title:Text(c.value),
-      subtitle:Text('60초 이하 ${state.top[c.key]?.where((v)=>v.eligibleForAutoSearch).length??0}개 · 총 ${state.scanned[c.key]??0}개 분석'
-       '${state.complete[c.key]==false?" · 불완전 수집":""}'),
-      trailing:IconButton(icon:const Icon(Icons.close),tooltip:'채널 제외',
-        onPressed:busy?null:(){setState(()=>state.channels.remove(c.key));save();})),
-    FilledButton.icon(onPressed:busy?null:scan,icon:const Icon(Icons.refresh),
-      label:const Text('60초 이하 영상만 상위 50개 갱신')),
-    FilledButton.icon(
-      onPressed:busy||count==0?null:()async{
-        final pool=<BenchVideo>[];
-        for(final key in state.channels.keys){
-          for(final video in state.top[key]??<BenchVideo>[]){
-            if(video.eligibleForAutoSearch&&!state.seen.contains(video.id))pool.add(video);
-          }
-        }
-        if(pool.isEmpty){report('추첨할 새 영상이 없어요. 갱신 후 기존 추첨을 확인하세요.');return;}
-        final video=pool[Random.secure().nextInt(pool.length)];
-        state.selected..clear()..add(video.id);
-        state.seen.add(video.id);
-        await save();
-        if(mounted)setState((){});
-        await search(video);
-      },
-      icon:const Icon(Icons.auto_awesome),
-      label:const Text('전체 원클릭 · 랜덤 1개 → 원본 검증 → 템플릿')),
-    OutlinedButton.icon(onPressed:busy||count==0?null:()=>run(()async{
-       state.draw();report('${state.selected.length}개 랜덤 추첨 · 이미 추첨한 영상은 제외');}),
-      icon:const Icon(Icons.shuffle),label:const Text('채널마다 무작위 1개 추첨')),
-    if(busy)const LinearProgressIndicator(),
-    if(message.isNotEmpty)SelectableText(message,style:const TextStyle(fontSize:12)),
-    const Divider(height:32),
-    Text('이번 선정 ${selected.length}개',style:const TextStyle(fontWeight:FontWeight.bold,fontSize:18)),
-         const Text('이미지 한 장에서 발견된 링크도 탐색하되 실제 동영상과 프레임을 대조해요. 검색 중에는 해당 카드에 진행 상황과 중단 버튼이 표시됩니다.',
-     style:TextStyle(fontSize:12)),
-    for(final v in selected)candidateCard(v),
-   ]));
+   final selected=state.picked.where((v)=>v.eligibleForAutoSearch).toList();
+   final count=state.top.values.fold<int>(0,(total,items)=>
+     total+items.where((video)=>video.eligibleForAutoSearch).length);
+   final unseen=<BenchVideo>[
+     for(final channel in state.channels.keys)
+       for(final video in state.top[channel]??<BenchVideo>[])
+         if(video.eligibleForAutoSearch&&!state.seen.contains(video.id))video
+   ];
+   final colors=Theme.of(context).colorScheme;
+   final theme=Theme.of(context);
+   return Scaffold(
+     appBar:AppBar(
+       title:const Text('쇼츠 원본 찾기'),
+       actions:[
+         IconButton(icon:const Icon(Icons.help_outline),
+           tooltip:'기능 안내',
+           onPressed:()=>showModalBottomSheet<void>(
+             context:context,showDragHandle:true,
+             builder:(ctx)=>SafeArea(child:Padding(
+               padding:const EdgeInsets.fromLTRB(20,8,20,24),
+               child:Column(mainAxisSize:MainAxisSize.min,
+                 crossAxisAlignment:CrossAxisAlignment.start,children:[
+                 Text('어떻게 찾나요?',style:Theme.of(ctx).textTheme.titleLarge),
+                 const SizedBox(height:12),
+                 const Text('1. 채널을 갱신하고 새 소재를 고릅니다.\n'
+                   '2. 주요 장면을 검색해 비슷한 게시물 후보를 모읍니다.\n'
+                   '3. 가능한 후보의 실제 영상·길이·자막을 검사합니다.\n'
+                   '4. 검증된 원본을 선택하거나 직접 확인해 제작합니다.\n\n'
+                   '60초 이하 세로 영상만 자동 선정합니다. '
+                   'Instagram은 영상 자동 검증이 지원되지 않아 링크를 직접 열어 확인해야 합니다.'),
+                 const SizedBox(height:16),
+                 Align(alignment:Alignment.centerRight,
+                   child:FilledButton(onPressed:()=>Navigator.pop(ctx),child:const Text('닫기'))),
+               ]))))),
+         ),
+       ]),
+     body:loading?const Center(child:CircularProgressIndicator()):
+       SafeArea(child:Center(child:ConstrainedBox(constraints:const BoxConstraints(maxWidth:850),
+         child:ListView(padding:const EdgeInsets.fromLTRB(16,10,16,28),children:[
+           Container(
+             padding:const EdgeInsets.all(20),
+             decoration:BoxDecoration(
+               color:colors.primaryContainer.withValues(alpha:.40),
+               borderRadius:BorderRadius.circular(22)),
+             child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+               Row(children:[
+                 Icon(Icons.smart_display_outlined,size:29,color:colors.primary),
+                 const SizedBox(width:10),
+                 Expanded(child:Text('원본 탐색',style:theme.textTheme.headlineSmall?.copyWith(
+                   fontWeight:FontWeight.w800))),
+               ]),
+               const SizedBox(height:10),
+               Text('소재를 고르고, 영상 장면과 자막까지 확인할 수 있어요.',
+                 style:theme.textTheme.bodyMedium),
+               const SizedBox(height:12),
+               Wrap(spacing:8,runSpacing:6,children:[
+                 Chip(avatar:const Icon(Icons.timer_outlined,size:16),
+                   label:const Text('60초 이하')),
+                 Chip(avatar:const Icon(Icons.crop_portrait,size:16),
+                   label:const Text('세로형 우선')),
+                 Chip(avatar:const Icon(Icons.subtitles_off_outlined,size:16),
+                   label:const Text('기존 자막 검사')),
+               ]),
+             ])),
+           const SizedBox(height:20),
+           Row(children:[
+             Expanded(child:Text('1. 소재 고르기',
+               style:theme.textTheme.titleLarge?.copyWith(fontWeight:FontWeight.w800))),
+             Text('숏폼 후보 $count개',style:TextStyle(fontSize:12,color:colors.onSurfaceVariant)),
+           ]),
+           const SizedBox(height:9),
+           Card(elevation:0,color:colors.surfaceContainerLow,
+             child:Padding(padding:const EdgeInsets.all(14),child:Column(
+               crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+                 Text('등록 채널 ${state.channels.length}개 · 아직 보지 않은 소재 ${unseen.length}개',
+                   style:TextStyle(fontSize:13,color:colors.onSurfaceVariant)),
+                 const SizedBox(height:12),
+                 FilledButton.icon(onPressed:busy||unseen.isEmpty?null:()=>drawRandom(),
+                   icon:const Icon(Icons.casino_outlined),
+                   label:const Padding(padding:EdgeInsets.symmetric(vertical:5),
+                     child:Text('새 쇼츠 추천받기'))),
+                 const SizedBox(height:8),
+                 OutlinedButton.icon(onPressed:busy?null:scan,
+                   icon:const Icon(Icons.refresh),
+                   label:const Text('채널 영상 목록 갱신')),
+                 if(unseen.isEmpty)Padding(
+                   padding:const EdgeInsets.only(top:8),
+                   child:Text(count==0?'먼저 채널의 영상을 갱신해 주세요.'
+                     :'새 소재를 모두 살펴봤어요. 채널 영상 목록을 갱신해 주세요.',
+                     style:TextStyle(fontSize:12,color:colors.onSurfaceVariant))),
+               ]))),
+           const SizedBox(height:18),
+           Row(children:[
+             Expanded(child:Text('2. 원본 찾기',
+               style:theme.textTheme.titleLarge?.copyWith(fontWeight:FontWeight.w800))),
+             if(selected.isNotEmpty)
+               Text('${selected.length}개 선택됨',
+                 style:TextStyle(fontSize:12,color:colors.onSurfaceVariant)),
+           ]),
+           const SizedBox(height:8),
+           if(selected.isEmpty)
+             Card(elevation:0,color:colors.surfaceContainerLow,
+               child:Padding(padding:const EdgeInsets.symmetric(vertical:25,horizontal:18),
+                 child:Column(children:[
+                   Icon(Icons.video_library_outlined,size:42,color:colors.outline),
+                   const SizedBox(height:10),
+                   Text('선정한 쇼츠가 없어요',style:theme.textTheme.titleMedium),
+                   const SizedBox(height:4),
+                   Text('위에서 새 쇼츠 추천받기를 누르면 이곳에 영상이 표시돼요.',
+                     textAlign:TextAlign.center,
+                     style:TextStyle(fontSize:13,color:colors.onSurfaceVariant))
+                 ]))),
+           for(final v in selected)candidateCard(v),
+           if(busy&&activeVideoId==null)...[
+             const SizedBox(height:8),
+             const LinearProgressIndicator(),
+           ],
+           if(message.isNotEmpty)...[
+             const SizedBox(height:10),
+             Container(
+               padding:const EdgeInsets.all(12),
+               decoration:BoxDecoration(color:colors.surfaceContainerLow,
+                 borderRadius:BorderRadius.circular(12)),
+               child:Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                 Icon(Icons.info_outline,size:18,color:colors.primary),
+                 const SizedBox(width:8),
+                 Expanded(child:Text(message,maxLines:3,overflow:TextOverflow.ellipsis,
+                   style:TextStyle(fontSize:12,color:colors.onSurfaceVariant))),
+               ])),
+           ],
+           const SizedBox(height:14),
+           ExpansionTile(
+             key:const PageStorageKey<String>('studio_channels_settings'),
+             tilePadding:const EdgeInsets.symmetric(horizontal:5),
+             title:const Text('채널 관리'),
+             subtitle:const Text('추가 · 제외 · 갱신 상태'),
+             leading:const Icon(Icons.video_collection_outlined),
+             children:[Padding(padding:const EdgeInsets.fromLTRB(8,0,8,12),
+               child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+                 Row(children:[
+                   Expanded(child:TextField(controller:channelText,
+                     enabled:!busy,
+                     decoration:const InputDecoration(
+                       labelText:'YouTube 채널 UC ID',
+                       isDense:true,border:OutlineInputBorder()))),
+                   const SizedBox(width:8),
+                   IconButton.filledTonal(
+                     onPressed:busy?null:(){
+                       final id=channelText.text.trim();
+                       if(!RegExp(r'^UC[\w-]{22}$').hasMatch(id)){
+                         report('UC로 시작하는 유효한 YouTube 채널 ID를 입력해 주세요.');
+                         return;
+                       }
+                       setState(()=>state.channels[id]=id);
+                       channelText.clear();save();
+                     },
+                     tooltip:'채널 추가',
+                     icon:const Icon(Icons.add))
+                 ]),
+                 const SizedBox(height:8),
+                 for(final channel in state.channels.entries.toList())
+                   ListTile(dense:true,contentPadding:EdgeInsets.zero,
+                     title:Text(channel.value,maxLines:1,overflow:TextOverflow.ellipsis),
+                     subtitle:Text('60초 이하 ${state.top[channel.key]?.where((v)=>v.eligibleForAutoSearch).length??0}개'),
+                     trailing:IconButton(
+                       onPressed:busy?null:()=>removeChannel(channel.key,channel.value),
+                       tooltip:'채널 제외 (확인)',
+                       icon:const Icon(Icons.remove_circle_outline))),
+               ]))],
+           ),
+           ExpansionTile(
+             key:const PageStorageKey<String>('studio_api_settings'),
+             initiallyExpanded:keyText.text.trim().isEmpty,
+             tilePadding:const EdgeInsets.symmetric(horizontal:5),
+             title:const Text('API 키 및 검색 기록'),
+             subtitle:const Text('연결 · 백업 · 복원'),
+             leading:const Icon(Icons.settings_outlined),
+             children:[Padding(padding:const EdgeInsets.fromLTRB(8,2,8,14),
+               child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+                 TextField(controller:keyText,enabled:!busy,obscureText:true,
+                   enableSuggestions:false,autocorrect:false,
+                   decoration:const InputDecoration(
+                     labelText:'YouTube Data API 키',isDense:true,border:OutlineInputBorder())),
+                 const SizedBox(height:7),
+                 Align(alignment:Alignment.centerRight,child:TextButton(
+                   onPressed:busy?null:()=>run(()async{
+                     await Native.call('saveBenchmarkApiKey',{'key':keyText.text.trim()});
+                     report('YouTube API 키를 안전하게 저장했어요.');
+                   }),child:const Text('YouTube 키 저장'))),
+                 const SizedBox(height:8),
+                 TextField(controller:visionKeyText,enabled:!busy,obscureText:true,
+                   enableSuggestions:false,autocorrect:false,
+                   decoration:const InputDecoration(
+                     labelText:'Cloud Vision API 키 (선택)',
+                     helperText:'비워두면 YouTube API 키를 이용합니다.',
+                     isDense:true,border:OutlineInputBorder())),
+                 const SizedBox(height:7),
+                 Align(alignment:Alignment.centerRight,child:TextButton(
+                   onPressed:busy?null:()=>run(()async{
+                     await Native.call('saveBenchmarkVisionKey',{'key':visionKeyText.text.trim()});
+                     report('Cloud Vision 키를 안전하게 저장했어요.');
+                   }),child:const Text('Vision 키 저장'))),
+                 const Divider(height:25),
+                 Text('실수로 삭제해도 검색 기록을 다시 가져올 수 있도록 '
+                   '백업을 메모 등에 보관할 수 있어요.',
+                   style:TextStyle(fontSize:12,color:colors.onSurfaceVariant)),
+                 const SizedBox(height:9),
+                 Wrap(spacing:8,runSpacing:8,children:[
+                   OutlinedButton.icon(onPressed:busy?null:exportBackup,
+                     icon:const Icon(Icons.copy_all_outlined,size:17),
+                     label:const Text('기록 백업 복사')),
+                   OutlinedButton.icon(onPressed:busy?null:restoreBackup,
+                     icon:const Icon(Icons.settings_backup_restore,size:17),
+                     label:const Text('백업 기록 복원')),
+                 ]),
+                 Text('API 키와 영상 파일은 백업에서 제외됩니다.',
+                   style:TextStyle(fontSize:11,color:colors.onSurfaceVariant))
+               ]))],
+           ),
+           const SizedBox(height:12),
+         ]))))
+   );
  }
 }
