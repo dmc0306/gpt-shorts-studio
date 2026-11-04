@@ -629,7 +629,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
                    Positioned(right:5,bottom:5,child:CircleAvatar(
                      radius:13,backgroundColor:colors.surface,
                      child:Icon(Icons.image_search,size:17,color:colors.primary))),
-                 ])))))),
+                 ]))))),
            const SizedBox(height:10),
          ],
          Row(children:[
@@ -735,7 +735,7 @@ class _BenchmarkState extends State<BenchmarkScreen>{
                  const SizedBox(height:16),
                  Align(alignment:Alignment.centerRight,
                    child:FilledButton(onPressed:()=>Navigator.pop(ctx),child:const Text('닫기'))),
-               ]))))),
+               ])))),
          ),
        ]),
      body:loading?const Center(child:CircularProgressIndicator()):
