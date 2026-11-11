@@ -1,4 +1,4 @@
-name: Inspect Gemini code segments
+name: Inspect title prompt rules
 on:
   push:
     branches: [feat/gemini-viral-titles-strict-length-20261111]
@@ -10,18 +10,15 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Extract AI prompt and title constraints
-        shell: bash
+      - name: Inspect actual title rules and tests
         run: |
           unzip -q shorts-studio-source.zip -d /tmp/source
           cd /tmp/source
-          echo '=== AI FILE STATS ==='
-          wc -l lib/ai.dart lib/headline.dart test/title_regeneration_test.dart
-          echo '=== AI SYMBOLS ==='
-          grep -nE 'prompt|title|Title|headline|Headline|5.{0,8}11|retry|regenerate|decodeTitles|curiosity|twist|humor|generateContent' lib/ai.dart | head -190 || true
-          echo '=== HEADLINE FILE ==='
-          sed -n '1,200p' lib/headline.dart
-          echo '=== AI FILE A ==='
-          sed -n '1,320p' lib/ai.dart
-          echo '=== AI FILE B ==='
-          sed -n '321,680p' lib/ai.dart
+          echo 'AI RULES BEGIN'
+          cat lib/ai_rules.dart
+          echo 'AI RULES END'
+          echo 'EXISTING HEADLINE TESTS BEGIN'
+          sed -n '1,140p' test/title_regeneration_test.dart
+          echo 'EXISTING HEADLINE TESTS END'
+          echo 'PROMPT USAGE'
+          grep -R -n 'titleRules\|headlineLineMinimum\|headlineLineLimit\|validHeadline' lib test | head -80
