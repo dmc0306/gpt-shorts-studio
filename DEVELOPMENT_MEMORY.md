@@ -334,3 +334,9 @@ PR #8 https://github.com/dmc0306/gpt-shorts-studio/pull/8 . 모든 PR CI 통과:
 - youtube_batch_publish_screen.dart: 완성 MP4 최대 20개 선택하여 지금 순차 전송하고 각 영상 YouTube 예약 공개. 미리 예약 시간 표시, 채널·권리 최종 승인, 진행·중단·중복방지 및 실패 시 남은 영상 보존. YouTubePanel/앱 메인 화면에서 진입 가능.
 중요한 한계: 휴대폰 앱이 실행 중일 때만 새로운 영상 파일을 업로드함. YouTube가 업로드된 영상을 미래의 시각에 자동 공개하는 것은 앱이 꺼져도 동작. 휴대폰이 꺼진 상태에서 새 영상을 생성·업로드하는 무중단 백그라운드 서버 스케줄러는 포함되지 않음. 이미 비공개로 게시한 영상은 자동 공개 상태로 변경되지 않음(YouTube Studio에서 변경). TikTok 등 재사용 영상은 저작권/이용 권한 확인이 필요.
 PR #10 https://github.com/dmc0306/gpt-shorts-studio/pull/10 , latest Flutter analyze/test PASS https://github.com/dmc0306/gpt-shorts-studio/actions/runs/41935991041 . Android signed build는 패키징 커밋 cf3474c6e3e105b2cca110757052e241c6e5095d 이후 본 문서 커밋으로 트리거.
+
+## 2026-11-11 — v0.21.23+82 Gemini 한국형 쇼츠 제목 프롬프트 개선
+요청: 이미 사용 중인 Gemini 영상→제목 명령문에 예시 스타일(액체 고양이, 나도 좀 먹고 살자, 복복복 가나디, 프로레슬링계 아이돌 등)의 자연스럽고 호기심/반전/공감형 제목을 적용하되, 화면 상단/하단 각각 공백 포함 5~11자라는 기존 제약을 유지.
+실제 수정 위치는 ZIP 내부 lib/ai_rules.dart 의 const titleRules로, 영상 파일을 전달하는 GeminiCaptions.generate 및 저장된 장면만 이용하는 GeminiCaptions.createTitles/regenerate(titleOnly:true)가 모두 이 상수를 사용. curiosity/twist/humor 각 style의 top/bottom JSON 필드와 에디터 화면, 기존 자막 생성/배치 규칙 변경 없음.
+새 프롬프트는 실제 관찰 행동·리액션 중심으로 자연스러운 카피, 원문 제목 직접 복사 금지, 입증되지 않은 상위 1%·세계 최초 등의 통계/랭킹과 억지 반전/허위 관계 금지, ㅋㅋ·ㄷㄷ은 과하지 않게 사용, 2줄 각 글자수 별도 확인 및 낱말 중간 분리 금지를 명시. 앱의 기존 grapheme-length validator (headline.dart / normalizeHeadline / decodeTitles) 및 최대 2회 재생성 기능을 그대로 보존. 새 test/gemini_title_style_test.dart에서 제목 예시/프롬프트/3종 후보 각각 길이 위반 거절 검사.
+PR #11 https://github.com/dmc0306/gpt-shorts-studio/pull/11 ; GitHub Flutter analyze + 전체 테스트 통과 https://github.com/dmc0306/gpt-shorts-studio/actions/runs/43038692598 ; 최신 패키징 main commit d1ae03a350795e056373bc8fe4509e9b5b9eca77 (0.21.23+82). 테스트는 명령문의 포함과 글자수 규칙을 검증하며, 실기기 Gemini의 실제 생성 문체나 조회수 성과까지 보장하지 않음. 이 커밋에서 Android 고정 서명 APK 빌드를 다시 트리거.
