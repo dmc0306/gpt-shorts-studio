@@ -1,0 +1,44 @@
+name: Validate Gemini viral title prompt
+on:
+  push:
+    branches: [feat/gemini-viral-titles-strict-length-20261111]
+    paths:
+      - 'tool/patch_gemini_title_style.py'
+      - 'tool/gemini_title_style_test.dart'
+      - '.github/workflows/validate-gemini-title-style.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tool/patch_gemini_title_style.py'
+      - 'tool/gemini_title_style_test.dart'
+      - '.github/workflows/validate-gemini-title-style.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply updated Gemini prompt to source ZIP
+        run: |
+          python3 tool/patch_gemini_title_style.py
+          unzip -q shorts-studio-source.zip -d app
+          grep -q '^version: 0.21.23+82' app/pubspec.yaml
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Bootstrap Flutter and Android dependencies
+        working-directory: app
+        run: python3 tool/bootstrap.py
+      - name: Static analysis
+        working-directory: app
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Unit and regression tests
+        working-directory: app
+        run: flutter test
