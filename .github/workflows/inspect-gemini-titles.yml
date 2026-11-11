@@ -1,0 +1,33 @@
+name: Inspect Gemini title generation and length constraints
+on:
+  push:
+    branches: [feat/gemini-viral-titles-strict-length-20261111]
+    paths: ['.github/workflows/inspect-gemini-titles.yml']
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect app source only; no API calls or secret values
+        shell: bash
+        run: |
+          mkdir -p /tmp/shorts-gemini
+          unzip -q shorts-studio-source.zip -d /tmp/shorts-gemini
+          cd /tmp/shorts-gemini
+          echo 'GEMINI PATHS'
+          find lib test -type f | grep -Ei '(ai|title|headline|gemini|prompt|editor|generate)' | head -70 || true
+          echo 'PROMPT REFERENCES'
+          rg -n 'Gemini|gemini|generateContent|headline|topText|bottomText|topTitle|bottomTitle|5.?11|11.?자|제목.*생성|제목.*추천|prompt' lib test -g'*.dart' | head -185 || true
+          echo 'SELECTED FILES'
+          for f in $(rg -l '(gemini|Gemini|generateContent)' lib -g'*.dart' | head -9); do
+             echo "FILE: $f"
+             sed -n '1,280p' "$f"
+          done
+          echo 'TEST FILES'
+          for f in $(find test -iname '*ai*' -o -iname '*title*' -o -iname '*gemini*' | head -4); do
+             echo "TEST: $f"
+             sed -n '1,160p' "$f"
+          done
