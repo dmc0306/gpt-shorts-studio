@@ -68,15 +68,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install timezone/title validator
-        run: python -m pip install 'regex>=2024.11'
       - name: Save chosen daily schedule (no secrets in repository)
         run: python automation/configure_daily.py
-      - name: Commit new UTC cron and daily settings
+      - name: Commit daily settings
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add automation/daily_config.json .github/workflows/daily-auto-publish.yml
+          git add automation/daily_config.json
           if git diff --cached --quiet; then
             echo "이미 같은 일정이 설정되어 있어요."
             exit 0
