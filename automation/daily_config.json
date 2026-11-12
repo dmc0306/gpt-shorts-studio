@@ -1,0 +1,15 @@
+{
+  "enabled": false,
+  "timezone": "Asia/Seoul",
+  "run_time": "09:00",
+  "publish_mode": "scheduled",
+  "publish_time": "18:00",
+  "topic": "귀여운 동물, 재미있는 반전, 짧은 일상 상황",
+  "licensed_tiktok_creators": [],
+  "rights_attested": false,
+  "youtube_channel_id": "",
+  "gemini_model": "gemini-3.5-flash",
+  "max_candidates": 8,
+  "min_duration_seconds": 5,
+  "max_duration_seconds": 60
+}
