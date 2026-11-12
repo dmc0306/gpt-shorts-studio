@@ -54,7 +54,7 @@ GitHub 저장소의 **Actions → Configure daily Shorts automation → Run work
 
 **다른 사람의 TikTok 영상을 발견했다는 사실만으로 재업로드 권한이 생기지 않습니다.** 소유하거나 허가받은 계정만 등록하세요. 앱의 화면 일치 검증이나 AI가 권리를 대신 확인해주지는 않습니다.
 
-설정 변경 뒤 GitHub Actions가 저장소의 `automation/daily_config.json`과 **GitHub Actions UTC cron**을 수정합니다. 예약 시각은 Asia/Seoul 기준으로 입력하면 됩니다.
+설정 변경 뒤 GitHub Actions가 저장소의 `automation/daily_config.json`을 수정합니다. GitHub Actions 예약 점검은 매시 7분과 37분(UTC)에 실행되어 한국시간 예약 시각이 지난 경우 그날 한 번만 제작을 시작합니다. 따라서 지정 시각보다 약 0~30분 늦게 시작될 수 있고, GitHub 자체 지연이 추가로 발생할 수도 있습니다.
 
 ### 3. 안전하게 시험하기
 
