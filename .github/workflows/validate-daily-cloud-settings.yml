@@ -1,0 +1,42 @@
+name: Validate daily cloud schedule entry in app
+on:
+  push:
+    branches: [feat/daily-cloud-settings-link-20261112]
+    paths:
+      - 'tool/patch_daily_cloud_settings.py'
+      - '.github/workflows/validate-daily-cloud-settings.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tool/patch_daily_cloud_settings.py'
+      - '.github/workflows/validate-daily-cloud-settings.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch source ZIP with settings explanation
+        run: |
+          python3 tool/patch_daily_cloud_settings.py
+          unzip -q shorts-studio-source.zip -d app
+          grep -q '^version: 0.21.24+83' app/pubspec.yaml
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Bootstrap Flutter app
+        working-directory: app
+        run: python3 tool/bootstrap.py
+      - name: Flutter analyze
+        working-directory: app
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Flutter regression tests
+        working-directory: app
+        run: flutter test
