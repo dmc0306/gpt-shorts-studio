@@ -1,0 +1,70 @@
+name: Daily discover, create and publish Shorts
+on:
+  schedule:
+    - cron: '0 0 * * *' # DAILY_KST_CRON
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "설정/예약 검사만 (영상 검색·제작·업로드 없음)"
+        type: boolean
+        default: true
+        required: true
+permissions:
+  contents: write
+concurrency:
+  group: daily-shorts-production
+  cancel-in-progress: false
+jobs:
+  daily:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+      YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+      YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+      YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+      GITHUB_ACTIONS: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install lightweight schedule checks
+        run: python -m pip install 'regex>=2024.11'
+      - name: Load last production state from independent branch
+        run: |
+          git fetch origin automation-state
+          git show origin/automation-state:automation/daily_state.json > automation/daily_state.json
+      - name: Validate configured schedule (dry-run, safe)
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run
+        run: python automation/daily_pipeline.py validate
+      - name: Reserve today's single upload attempt
+        id: reserve
+        if: github.event_name != 'workflow_dispatch' || !inputs.dry_run
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            python automation/daily_pipeline.py reserve --manual
+          else
+            python automation/daily_pipeline.py reserve
+          fi
+      - name: Install video and OCR tools
+        if: steps.reserve.outputs.run == 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg tesseract-ocr tesseract-ocr-kor tesseract-ocr-eng fonts-noto-cjk
+          python -m pip install -r automation/requirements.txt
+      - name: Search licensed clips, analyze, render and upload
+        if: steps.reserve.outputs.run == 'true'
+        run: python automation/daily_pipeline.py run
+      - name: Save nonsecret execution receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-shorts-report
+          path: automation/daily_state.json
+          retention-days: 30
