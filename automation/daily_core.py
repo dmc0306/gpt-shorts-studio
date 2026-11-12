@@ -23,6 +23,8 @@ def parse_clock(text: str) -> tuple[int, int]:
 
 def validate_config(config: dict, *, for_publish: bool = False) -> None:
     tz = config.get("timezone", "Asia/Seoul")
+    if tz != "Asia/Seoul":
+        raise SetupError("현재 예약 실행은 한국 시간 Asia/Seoul만 지원합니다.")
     try:
         ZoneInfo(tz)
     except (KeyError, ValueError) as exc:
@@ -72,6 +74,12 @@ def schedule_due(config: dict, state: dict, now: datetime, *, manual: bool = Fal
     if local - due > timedelta(hours=6):
         return False, today, "missed_window"
     return True, today, "scheduled"
+
+
+def utc_daily_cron(local_time: str) -> str:
+    """GitHub Actions cron uses UTC; Korea has a fixed UTC+9 offset."""
+    hour, minute = parse_clock(local_time)
+    return f"{minute} {(hour - 9) % 24} * * *"
 
 
 def next_publish_at(config: dict, now: datetime) -> datetime | None:
