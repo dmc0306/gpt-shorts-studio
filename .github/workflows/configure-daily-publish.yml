@@ -1,0 +1,83 @@
+name: Configure daily Shorts automation
+on:
+  workflow_dispatch:
+    inputs:
+      enabled:
+        description: "매일 자동 검색·제작·업로드 활성화"
+        required: true
+        default: false
+        type: boolean
+      run_time:
+        description: "매일 자동 작업 시작(한국시간 HH:MM, 예: 09:00)"
+        required: true
+        default: '09:00'
+        type: string
+      publish_mode:
+        description: "공개 방식"
+        type: choice
+        required: true
+        default: scheduled
+        options: [scheduled, public, private]
+      publish_time:
+        description: "예약 공개 시각(한국시간 HH:MM, 예: 18:00)"
+        default: '18:00'
+        type: string
+      topic:
+        description: "영상 탐색 주제"
+        default: "귀여운 동물, 재미있는 반전, 짧은 일상 상황"
+        type: string
+      licensed_creators:
+        description: "직접 소유·재게시 허가된 TikTok 계정명 (쉼표로 구분)"
+        default: ""
+        type: string
+      youtube_channel_id:
+        description: "게시할 나의 YouTube 채널 UC... ID"
+        default: ""
+        type: string
+      rights_attested:
+        description: "해당 계정 영상의 재게시 및 수정·배포 권한 보유 확인"
+        default: false
+        required: true
+        type: boolean
+permissions:
+  contents: write
+concurrency:
+  group: daily-shorts-configuration
+  cancel-in-progress: false
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    env:
+      CFG_ENABLED: ${{ inputs.enabled }}
+      CFG_RUN_TIME: ${{ inputs.run_time }}
+      CFG_MODE: ${{ inputs.publish_mode }}
+      CFG_PUBLISH_TIME: ${{ inputs.publish_time }}
+      CFG_TOPIC: ${{ inputs.topic }}
+      CFG_CREATORS: ${{ inputs.licensed_creators }}
+      CFG_CHANNEL_ID: ${{ inputs.youtube_channel_id }}
+      CFG_RIGHTS: ${{ inputs.rights_attested }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+      YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+      YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+      YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Save chosen daily schedule (no secrets in repository)
+        run: python automation/configure_daily.py
+      - name: Commit daily settings
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add automation/daily_config.json
+          if git diff --cached --quiet; then
+            echo "이미 같은 일정이 설정되어 있어요."
+            exit 0
+          fi
+          git commit -m "Configure KST daily Shorts automation"
+          git push
