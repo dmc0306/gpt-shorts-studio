@@ -7,7 +7,6 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
-import regex
 
 
 class SetupError(ValueError):
