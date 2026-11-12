@@ -4,11 +4,10 @@ import os
 import re
 from pathlib import Path
 
-from daily_core import validate_config, utc_daily_cron
+from daily_core import validate_config
 
 ROOT=Path(__file__).resolve().parent
 config_path=ROOT/"daily_config.json"
-workflow_path=ROOT.parent/".github/workflows/daily-auto-publish.yml"
 
 
 def main() -> None:
@@ -35,15 +34,9 @@ def main() -> None:
         ) if not os.getenv(name)]
         if missing:
             raise ValueError("공개 자동화 활성화 전에 Secrets 등록 필요: "+", ".join(missing))
-    cron=utc_daily_cron(config["run_time"])
-    contents=workflow_path.read_text(encoding="utf-8")
-    matcher=r"(?m)^    - cron: '[^']+' # DAILY_KST_CRON$"
-    updated,n=re.subn(matcher,f"    - cron: '{cron}' # DAILY_KST_CRON",contents)
-    if n!=1:raise ValueError("GitHub Actions 예약 설정을 찾지 못했습니다.")
-    workflow_path.write_text(updated,encoding="utf-8")
     config_path.write_text(json.dumps(config,ensure_ascii=False,indent=2)+"\n",
                            encoding="utf-8")
-    print("한국 시간 "+config["run_time"]+" 매일 예약; Actions UTC cron="+cron)
+    print("한국 시간 "+config["run_time"]+" 이후 30분 간격 점검 시 실행 (GitHub 지연 가능)")
     print("자동 제작 업로드: "+("활성화" if enabled else "비활성화"))
     print("공개 모드: "+config["publish_mode"])
 
