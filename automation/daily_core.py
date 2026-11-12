@@ -114,6 +114,7 @@ def source_fingerprint(url: str) -> str:
 
 
 def _visible_len(line: str) -> int:
+    import regex
     return len(regex.findall(r"\X", line))
 
 
