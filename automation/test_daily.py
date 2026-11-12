@@ -84,6 +84,23 @@ class DailyPipelineTests(unittest.TestCase):
             with self.assertRaises(SetupError):
                 validate_title(top,bottom)
 
+    def test_ass_title_and_caption_encoding_stays_inside_two_line_format(self):
+        from tempfile import TemporaryDirectory
+        with TemporaryDirectory() as directory:
+            target=Path(directory)/"short.ass"
+            daily_pipeline.make_ass({
+                "top":"휴대폰 보다가",
+                "bottom":"스스로를 찍었다",
+                "captions":[{"start":1.0,"end":2.5,"text":"어라? ㄷㄷ"}],
+            },15.0,target)
+            contents=target.read_text(encoding="utf-8")
+            self.assertIn("Style: TOP",contents)
+            self.assertIn("Style: BOTTOM",contents)
+            self.assertIn("Style: CAPTION",contents)
+            self.assertIn("휴대폰 보다가",contents)
+            self.assertIn("스스로를 찍었다",contents)
+            self.assertIn("0:00:01.00,0:00:02.50,CAPTION",contents)
+
     def test_failed_upload_never_moves_to_second_candidate(self):
         urls=[
             "https://www.tiktok.com/@licensed_creator/video/123",
