@@ -24,6 +24,11 @@ from daily_core import (
 )
 
 
+class UploadUncertain(RuntimeError):
+    """Do not try another video: YouTube may have accepted the prior upload."""
+    pass
+
+
 ROOT = Path(__file__).resolve().parent
 CONFIG = ROOT / "daily_config.json"
 STATE = ROOT / "daily_state.json"
@@ -454,13 +459,20 @@ def produce(config: dict, state: dict, secrets: dict) -> dict:
                 state["status"] = "upload_pending"
                 atomic_write(STATE, state)
                 sync_state()
-                video_id, actual_privacy = upload_youtube(rendered, meta, url, config, secrets)
+                try:
+                    video_id, actual_privacy = upload_youtube(rendered, meta, url, config, secrets)
+                except Exception:
+                    raise UploadUncertain(
+                        "YouTube 응답 확인 실패 · 중복 업로드 방지 위해 오늘 전송 종료"
+                    ) from None
                 return {
                     "source": fingerprint,
                     "video_id": video_id,
                     "actual_privacy": actual_privacy,
                     "title": meta["top"] + " " + meta["bottom"],
                 }
+            except UploadUncertain:
+                raise
             except (SetupError, RuntimeError, OSError, subprocess.SubprocessError,
                     ValueError, KeyError, TypeError) as exc:
                 say("후보 검사 실패: " + type(exc).__name__ + " · 다음 영상 검사")
@@ -512,7 +524,7 @@ def main() -> int:
         say("유튜브 접수 성공: " + result["video_id"] +
             " · 실제 privacy=" + result["actual_privacy"])
     except Exception as exc:
-        state["status"] = "failed"
+        state["status"] = "upload_uncertain" if state.get("pending_source") else "failed"
         state["last_error"] = type(exc).__name__ + ": " + str(exc)[:140]
         say("오늘 자동 제작/업로드 실패 · 중복 전송 방지를 위해 자동 재시도하지 않습니다.")
         raise
