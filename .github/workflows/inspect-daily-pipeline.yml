@@ -1,0 +1,35 @@
+name: Inspect automatic batch scheduling architecture
+on:
+  push:
+    branches: [feat/daily-discover-produce-publish-20261112]
+    paths: ['.github/workflows/inspect-daily-pipeline.yml']
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect native wake scheduling and Flutter automatic pipeline
+        run: |
+          mkdir -p /tmp/daily-source
+          unzip -q shorts-studio-source.zip -d /tmp/daily-source
+          cd /tmp/daily-source
+          echo '=== DIRECTORY ==='
+          find lib native/android tool -maxdepth 2 -type f | sort | head -100
+          echo '=== AUTOBATCH HEAD ==='
+          sed -n '1,240p' lib/auto_batch.dart
+          echo '=== AUTOBATCH MID ==='
+          sed -n '241,510p' lib/auto_batch.dart
+          echo '=== AUTOBATCH END ==='
+          sed -n '511,780p' lib/auto_batch.dart
+          echo '=== MAIN CALLSITE ==='
+          grep -n -C 7 'AutoBatch\|autoBatch\|auto_batch\|youtubeSettings' lib/main.dart | head -170
+          echo '=== NATIVE BRIDGE ==='
+          sed -n '1,180p' lib/bridge.dart
+          echo '=== NATIVE ANDROID ==='
+          find native/android -maxdepth 2 -type f | sort
+          echo '=== BOOTSTRAP ==='
+          sed -n '1,210p' tool/bootstrap.py
+          echo '=== MANIFEST DEPENDENCIES ==='
+          find native/android -type f \( -name '*Manifest*' -o -name '*.gradle*' \) -exec sh -c 'echo ==== $1; head -100 "$1"' _ {} \;
