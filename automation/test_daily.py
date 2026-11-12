@@ -101,6 +101,30 @@ class DailyPipelineTests(unittest.TestCase):
             self.assertIn("스스로를 찍었다",contents)
             self.assertIn("0:00:01.00,0:00:02.50,CAPTION",contents)
 
+    def test_ffmpeg_can_render_title_over_actual_portrait_video(self):
+        import shutil
+        import subprocess
+        from tempfile import TemporaryDirectory
+        if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
+            self.skipTest("FFmpeg unavailable")
+        with TemporaryDirectory() as directory:
+            tmp=Path(directory)
+            original=tmp/"synthetic.mp4"
+            subprocess.run([
+                "ffmpeg","-hide_banner","-loglevel","error","-y",
+                "-f","lavfi","-i","testsrc2=size=320x568:rate=24:duration=5",
+                "-c:v","libx264","-pix_fmt","yuv420p",str(original),
+            ],check=True,timeout=65)
+            output=daily_pipeline.render_video(original,{
+                "top":"휴대폰 보다가",
+                "bottom":"스스로를 찍었다",
+                "captions":[{"start":1.0,"end":2.5,"text":"어라?"}]
+            },5,tmp)
+            length,width,height=daily_pipeline.probe_file(output)
+            self.assertGreater(output.stat().st_size,10000)
+            self.assertEqual((width,height),(1080,1920))
+            self.assertGreater(length,4.5)
+
     def test_failed_upload_never_moves_to_second_candidate(self):
         urls=[
             "https://www.tiktok.com/@licensed_creator/video/123",
