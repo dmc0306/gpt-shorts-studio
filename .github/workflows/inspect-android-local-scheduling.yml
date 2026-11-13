@@ -14,15 +14,16 @@ jobs:
         run: |
           unzip -q shorts-studio-source.zip -d app
           cd app
-          echo '== BATCH SERVICE =='
-          cat native/android/BatchService.kt
-          echo '== MAIN ACTIVITY DECLARATIONS / CHANNELS =='
-          rg -n '^(class|data class)|configureFlutterEngine|setMethodCallHandler|MethodChannel|fun |override fun|batch|export|scanOriginalText|loadAiSettings|saveAiSettings|download' native/android/MainActivity.kt | head -260
-          echo '== MAIN ACTIVITY 1 =='
-          sed -n '1,240p' native/android/MainActivity.kt
-          echo '== MAIN ACTIVITY 2 =='
-          sed -n '241,500p' native/android/MainActivity.kt
-          echo '== BATCH DART BUILD / METHODS =='
-          rg -n 'Future<void> start|Future<void> uploadCompleted|Future<void> render|Future<void> scanVisible|while\(saved|checkpoints|batchStart|savedCount|GeminiCaptions|MixedDiscovery|TikTokDownloader|Native.call' lib/auto_batch.dart | head -125
-          echo '== GEMINI AND DISCOVERY INTERFACES =='
-          rg -n 'class GeminiCaptions|Future<|static |class MixedDiscovery|class TikTokDownloader|class Clip' lib/ai.dart lib/discovery.dart lib/tiktok_download.dart lib/model.dart | head -180
+          echo '== AI METHODS =='
+          grep -nE 'class GeminiCaptions|Future<|static |decode|analy|generate|createTitles' lib/ai.dart | head -130
+          echo '== AI START =='
+          sed -n '1,185p' lib/ai.dart
+          echo '== DISCOVERY START =='
+          sed -n '1,200p' lib/discovery.dart
+          echo '== TIKTOK DOWNLOADER =='
+          sed -n '1,230p' lib/tiktok_download.dart
+          echo '== YOUTUBE SETTINGS/TOKEN HANDLING =='
+          grep -nE 'class YouTubeChromeAuth|fun token|fun refresh|refreshToken|readAiKey|token\(' native/android/YouTubeChromeAuth.kt | head -70
+          sed -n '1,240p' native/android/YouTubeChromeAuth.kt
+          echo '== FLUTTER OVERLAY =='
+          sed -n '1,140p' lib/overlay_renderer.dart
