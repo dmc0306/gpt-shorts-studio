@@ -1,0 +1,48 @@
+name: Validate on-device WorkManager daily schedule
+on:
+  push:
+    branches: [feat/android-local-background-daily-20261114]
+    paths:
+      - 'tool/patch_android_daily_local.py'
+      - 'tool/AndroidDailyScheduler.kt'
+      - 'tool/daily_local_settings.dart'
+      - '.github/workflows/validate-android-daily-local.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tool/patch_android_daily_local.py'
+      - 'tool/AndroidDailyScheduler.kt'
+      - 'tool/daily_local_settings.dart'
+      - '.github/workflows/validate-android-daily-local.yml'
+permissions: {contents: read}
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch app source
+        run: |
+          python3 tool/patch_android_daily_local.py
+          unzip -q shorts-studio-source.zip -d app
+          grep -q 'version: 0.21.25+84' app/pubspec.yaml
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Bootstrap Flutter & native
+        working-directory: app
+        run: python3 tool/bootstrap.py
+      - name: Flutter static analysis
+        working-directory: app
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Run regression tests
+        working-directory: app
+        run: flutter test
+      - name: Compile Android with WorkManager
+        working-directory: app
+        run: flutter build apk --debug
