@@ -86,7 +86,7 @@ replace("native/android/MainActivity.kt",
     'companion object { @Volatile var dailyRunChannel:MethodChannel?=null; const val ACTION_CHROME_OAUTH_REDIRECT')
 replace("native/android/MainActivity.kt",
     '        BatchService.onStop={MethodChannel(engine.dartExecutor.binaryMessenger,"studio.local/batch").invokeMethod("stop",null)}',
-    '        dailyRunChannel=MethodChannel(engine.dartExecutor.binaryMessenger,"studio.local/daily_run")\\n'
+    '        dailyRunChannel=MethodChannel(engine.dartExecutor.binaryMessenger,"studio.local/daily_run")\n'
     '        BatchService.onStop={MethodChannel(engine.dartExecutor.binaryMessenger,"studio.local/batch").invokeMethod("stop",null)}')
 replace("native/android/MainActivity.kt",
     'override fun onDestroy(){if(youtubeChromeDelegate.isInitialized())',
@@ -106,7 +106,7 @@ replace("native/android/AndroidManifest.xml",
 
 replace("lib/main.dart",
     "import 'auto_batch.dart';",
-    "import 'auto_batch.dart';\\nimport 'youtube.dart';")
+    "import 'auto_batch.dart';\nimport 'youtube.dart';")
 replace("lib/main.dart",
     " @override void initState(){super.initState();WidgetsBinding.instance.addObserver(this);init();}",
     """ static const localDaily=MethodChannel('studio.local/daily_run');
