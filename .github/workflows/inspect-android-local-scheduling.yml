@@ -1,4 +1,4 @@
-name: Inspect local Android scheduling integration
+name: Inspect precise headless paths
 on:
   push:
     branches: [feat/android-local-background-daily-20261114]
@@ -7,23 +7,20 @@ permissions: {contents: read}
 jobs:
   inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect Android and Flutter implementation
-        run: |
+      - run: |
           unzip -q shorts-studio-source.zip -d app
           cd app
-          echo '== AI METHODS =='
-          grep -nE 'class GeminiCaptions|Future<|static |decode|analy|generate|createTitles' lib/ai.dart | head -130
-          echo '== AI START =='
-          sed -n '1,185p' lib/ai.dart
-          echo '== DISCOVERY START =='
-          sed -n '1,200p' lib/discovery.dart
-          echo '== TIKTOK DOWNLOADER =='
-          sed -n '1,230p' lib/tiktok_download.dart
-          echo '== YOUTUBE SETTINGS/TOKEN HANDLING =='
-          grep -nE 'class YouTubeChromeAuth|fun token|fun refresh|refreshToken|readAiKey|token\(' native/android/YouTubeChromeAuth.kt | head -70
-          sed -n '1,240p' native/android/YouTubeChromeAuth.kt
-          echo '== FLUTTER OVERLAY =='
-          sed -n '1,140p' lib/overlay_renderer.dart
+          echo '=== YOUTUBE AUTH TOKEN ==='
+          sed -n '268,360p' native/android/YouTubeChromeAuth.kt
+          echo '=== YOUTUBE DART ==='
+          sed -n '1,280p' lib/youtube.dart
+          echo '=== AUTO FINISH ==='
+          sed -n '125,300p' lib/auto_batch.dart
+          echo '=== GEMINI GENERATE ==='
+          sed -n '184,248p' lib/ai.dart
+          echo '=== DOWNLOADER INTERFACE ==='
+          grep -n 'Future<.*download\|download(' lib/tiktok_download.dart | head
+          echo '=== DISCOVERY INTERFACE ==='
+          grep -n 'Future<.*discover\|discover(' lib/discovery.dart | head
