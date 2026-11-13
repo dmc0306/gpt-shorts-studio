@@ -62,22 +62,27 @@ end=text.find("        if(widget.clips.any((c)=>c.savedUri.isNotEmpty))...[",sta
 if start<0 or end<=start:
     raise RuntimeError("Could not isolate previously installed GitHub Actions UI")
 # retain divider preceding old text and replace the entire inaccurate cloud hint
-text=text[:start]+'''        const Text('휴대폰 백그라운드 자동 제작 예약',
-          style:TextStyle(fontSize:19,fontWeight:FontWeight.w600)),
-        const SizedBox(height:8),
-        const Text('GitHub Actions 대신 Android WorkManager에서 '
-          '매일 시각을 관리합니다. 앱 프로세스가 살아 있으면 '
-          '허가된 TikTok 영상 검색·Gemini 제목·자막·MP4 제작·'
-          'YouTube 업로드를 하루 1회 시도합니다. '
-          '완전히 종료된 앱을 화면 없이 다시 실행할 수는 없으며, '
-          '이 경우에는 수동 시작 안내 알림으로 전환됩니다.',
-          style:TextStyle(fontSize:12)),
-        const SizedBox(height:8),
-        OutlinedButton.icon(
-          onPressed:locked?null:()=>Navigator.of(context).push(
-            MaterialPageRoute(builder:(_)=>const DailyLocalSettingsScreen())),
-          icon:const Icon(Icons.schedule_outlined),
-          label:const Text('기기 내 예약 시간 설정'),
+text=text[:start]+'''        ExpansionTile(
+          title:const Text('휴대폰 백그라운드 자동 제작 예약',
+            style:TextStyle(fontWeight:FontWeight.w600)),
+          subtitle:const Text('매일 1회 · 영상 검색부터 YouTube까지'),
+          children:[Padding(padding:const EdgeInsets.fromLTRB(8,4,8,16),
+            child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+              const Text('GitHub Actions 없이 Android WorkManager에서 실행합니다. '
+                '앱 프로세스가 살아 있으면 허가된 TikTok 영상 검색, '
+                'Gemini 제목·자막 생성, MP4 제작 및 YouTube 업로드를 1회 시도합니다. '
+                '앱이 완전히 종료된 상태에서는 사용자 알림으로 전환되며 '
+                '자동 실행을 보장하지 않습니다.',
+                style:TextStyle(fontSize:12)),
+              const SizedBox(height:8),
+              OutlinedButton.icon(
+                onPressed:locked?null:()=>Navigator.of(context).push(
+                  MaterialPageRoute(builder:(_)=>const DailyLocalSettingsScreen())),
+                icon:const Icon(Icons.schedule_outlined),
+                label:const Text('기기 내 예약 시간 설정'),
+              ),
+            ]))),
+          ],
         ),
 ''' +text[end:]
 updates[path]=text.encode("utf-8")
