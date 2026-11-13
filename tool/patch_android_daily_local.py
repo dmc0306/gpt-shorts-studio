@@ -79,6 +79,154 @@ text=text[:start]+'''        const Text('휴대폰 백그라운드 예약 알림
         ),
 ''' +text[end:]
 updates[path]=text.encode("utf-8")
+
+# Keep a reference only while a real Flutter Activity engine exists.
+replace("native/android/MainActivity.kt",
+    'companion object { const val ACTION_CHROME_OAUTH_REDIRECT',
+    'companion object { @Volatile var dailyRunChannel:MethodChannel?=null; const val ACTION_CHROME_OAUTH_REDIRECT')
+replace("native/android/MainActivity.kt",
+    '        BatchService.onStop={MethodChannel(engine.dartExecutor.binaryMessenger,"studio.local/batch").invokeMethod("stop",null)}',
+    '        dailyRunChannel=MethodChannel(engine.dartExecutor.binaryMessenger,"studio.local/daily_run")\\n'
+    '        BatchService.onStop={MethodChannel(engine.dartExecutor.binaryMessenger,"studio.local/batch").invokeMethod("stop",null)}')
+replace("native/android/MainActivity.kt",
+    'override fun onDestroy(){if(youtubeChromeDelegate.isInitialized())',
+    'override fun onDestroy(){dailyRunChannel=null;if(youtubeChromeDelegate.isInitialized())')
+replace("native/android/MainActivity.kt",
+    '''                r.success(AndroidDailyScheduler.configure(
+                    applicationContext,enabled,hour,minute))''',
+    '''                r.success(AndroidDailyScheduler.configure(
+                    applicationContext,enabled,hour,minute,
+                    call.argument<String>("creators")?:"",
+                    call.argument<Boolean>("rights")==true))''')
+replace("native/android/AndroidManifest.xml",
+    '        <service android:name=".BatchService" android:exported="false" android:foregroundServiceType="dataSync|mediaProcessing" />',
+    '''        <service android:name=".BatchService" android:exported="false" android:foregroundServiceType="dataSync|mediaProcessing" />
+        <service android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync|mediaProcessing" tools:node="merge" />''')
+
+replace("lib/main.dart",
+    "import 'auto_batch.dart';",
+    "import 'auto_batch.dart';\\nimport 'youtube.dart';")
+replace("lib/main.dart",
+    " @override void initState(){super.initState();WidgetsBinding.instance.addObserver(this);init();}",
+    """ static const localDaily=MethodChannel('studio.local/daily_run');
+ @override void initState(){
+   super.initState();
+   WidgetsBinding.instance.addObserver(this);
+   localDaily.setMethodCallHandler(_runScheduled);
+   init();
+ }
+ Future<bool> _runScheduled(MethodCall call)async{
+   if(call.method!='startDaily'||!mounted||!loaded||busy||draining||scanning||
+      downloader!=null)return false;
+   final raw=(call.arguments is Map)?call.arguments as Map:{};
+   final allowed=(raw['creators'] is List)
+     ?(raw['creators'] as List).whereType<String>().map((s)=>s.toLowerCase()).toSet()
+     :<String>{};
+   if(allowed.isEmpty)return false;
+   try{
+     final y=YouTube.instance;
+     await y.loadSettings();
+     if(!y.automatic||!y.preferences.confirmed||
+       (y.preferences.publishMode!='private'&&!y.preferences.publicApproved)){
+       return false;
+     }
+     final done=Completer<bool>();
+     if(!mounted||busy)return false;
+     setState(()=>busy=true);
+     final route=Navigator.of(context).push(MaterialPageRoute(
+       builder:(_)=>AutoBatchScreen(
+         clips:clips,onSave:()=>Native.save(clips),
+         dailyTriggered:true,licensedCreators:allowed,
+         onDailyFinished:(ok){if(!done.isCompleted)done.complete(ok);}
+       )));
+     unawaited(route.then((_){
+       if(!done.isCompleted)done.complete(false);
+     }));
+     final result=await done.future;
+     if(mounted)setState(()=>busy=false);
+     return result;
+   }catch(_){
+     if(mounted)setState(()=>busy=false);
+     return false;
+   }
+ }
+""")
+replace("lib/main.dart",
+    " @override void dispose(){downloader?.cancel();timer?.cancel();WidgetsBinding.instance.removeObserver(this);super.dispose();}",
+    " @override void dispose(){localDaily.setMethodCallHandler(null);downloader?.cancel();timer?.cancel();WidgetsBinding.instance.removeObserver(this);super.dispose();}")
+
+replace("lib/auto_batch.dart",
+    " const AutoBatchScreen({super.key,required this.clips,required this.onSave});",
+    """ const AutoBatchScreen({super.key,required this.clips,required this.onSave,
+   this.dailyTriggered=false,this.licensedCreators=const <String>{},this.onDailyFinished});""")
+replace("lib/auto_batch.dart",
+    " final Future<void> Function() onSave;",
+    """ final Future<void> Function() onSave;
+ final bool dailyTriggered;
+ final Set<String> licensedCreators;
+ final void Function(bool success)? onDailyFinished;""")
+replace("lib/auto_batch.dart",
+    " bool previewing=false;",
+    " bool previewing=false,reportedDaily=false;")
+replace("lib/auto_batch.dart",
+    "  if(mounted)setState(()=>loading=false);",
+    """  if(mounted)setState(()=>loading=false);
+  if(widget.dailyTriggered&&mounted){
+    WidgetsBinding.instance.addPostFrameCallback((_){
+      if(mounted)unawaited(start());
+    });
+  }""")
+replace("lib/auto_batch.dart",
+    " @override void dispose(){stopPoll?.cancel();",
+    """ @override void dispose(){
+  if(widget.dailyTriggered&&!reportedDaily){
+    reportedDaily=true;
+    widget.onDailyFinished?.call(false);
+  }
+  stopPoll?.cancel();""")
+replace("lib/auto_batch.dart",
+    "  if((!previewOnly&&key.isEmpty)||searchKey.isEmpty){update('AI 설정에서 Gemini 키와 Tavily 검색 키를 입력해 주세요.');await settings();return;}",
+    """  if((!previewOnly&&key.isEmpty)||searchKey.isEmpty){
+   update('AI 설정에서 Gemini 키와 Tavily 검색 키를 입력해 주세요.');
+   if(widget.dailyTriggered){
+     if(!reportedDaily){reportedDaily=true;widget.onDailyFinished?.call(false);}
+   }else{await settings();}
+   return;
+  }""")
+replace("lib/auto_batch.dart",
+    "   await Native.call('batchStart');await saveReport();",
+    "   if(!widget.dailyTriggered)await Native.call('batchStart');await saveReport();")
+replace("lib/auto_batch.dart",
+    "while(saved<5&&(!previewOnly||previewCount<5)",
+    "while(saved<(widget.dailyTriggered?1:5)&&(!previewOnly||previewCount<5)")
+replace("lib/auto_batch.dart",
+    "    final candidate=selected;processed++;tried.add(MixedDiscovery.videoId(candidate.url)!);var retain=false;",
+    """    final candidate=selected;
+    if(widget.dailyTriggered){
+      final handle=RegExp(r'/@([^/]+)/video/')
+        .firstMatch(candidate.url)?.group(1)?.toLowerCase();
+      if(handle==null||!widget.licensedCreators.contains(handle)){
+        store.finish(candidate);
+        tried.add(MixedDiscovery.videoId(candidate.url)!);
+        continue;
+      }
+    }
+    processed++;tried.add(MixedDiscovery.videoId(candidate.url)!);var retain=false;""")
+replace("lib/auto_batch.dart",
+    "   try{await Native.call('batchFinish',{'status':status,'saved':savedCount});}catch(_){}",
+    "   if(!widget.dailyTriggered)try{await Native.call('batchFinish',{'status':status,'saved':savedCount});}catch(_){}")
+# exact original finish may use no spaces in catch; repair against verified anchor below
+
+replace("lib/auto_batch.dart",
+    "   if(exitRequested&&mounted)Navigator.pop(context);",
+    """   if(widget.dailyTriggered&&!reportedDaily){
+     reportedDaily=true;
+     widget.onDailyFinished?.call(reports.any((r)=>
+       r['youtubeVideoId'] is String&&
+       (r['youtubeVideoId'] as String).isNotEmpty));
+   }
+   if(exitRequested&&mounted)Navigator.pop(context);""")
 newfiles={
     "native/android/AndroidDailyScheduler.kt":
         Path("tool/AndroidDailyScheduler.kt").read_bytes(),
