@@ -1,4 +1,4 @@
-name: Inspect precise headless paths
+name: Inspect Flutter activity callbacks for daily background handoff
 on:
   push:
     branches: [feat/android-local-background-daily-20261114]
@@ -12,15 +12,10 @@ jobs:
       - run: |
           unzip -q shorts-studio-source.zip -d app
           cd app
-          echo '=== YOUTUBE AUTH TOKEN ==='
-          sed -n '268,360p' native/android/YouTubeChromeAuth.kt
-          echo '=== YOUTUBE DART ==='
-          sed -n '1,280p' lib/youtube.dart
-          echo '=== AUTO FINISH ==='
-          sed -n '125,300p' lib/auto_batch.dart
-          echo '=== GEMINI GENERATE ==='
-          sed -n '184,248p' lib/ai.dart
-          echo '=== DOWNLOADER INTERFACE ==='
-          grep -n 'Future<.*download\|download(' lib/tiktok_download.dart | head
-          echo '=== DISCOVERY INTERFACE ==='
-          grep -n 'Future<.*discover\|discover(' lib/discovery.dart | head
+          echo '== MAIN TOP =='
+          sed -n '1,145p' lib/main.dart
+          echo '== AUTO BATCH TOP =='
+          sed -n '1,130p' lib/auto_batch.dart
+          echo '== AUTOBATCH BUILD =='
+          grep -nE 'Widget build|void initState|Future<void> load|Future<void> start' lib/auto_batch.dart
+          sed -n '300,400p' lib/auto_batch.dart
