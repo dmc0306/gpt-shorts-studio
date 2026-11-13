@@ -226,6 +226,15 @@ replace("lib/auto_batch.dart",
 # exact original finish may use no spaces in catch; repair against verified anchor below
 
 replace("lib/auto_batch.dart",
+    "const Text('웃긴 순간, 한 번에 5개'",
+    "Text(widget.dailyTriggered?'오늘의 영상 1개':'웃긴 순간, 한 번에 5개'")
+replace("lib/auto_batch.dart",
+    "Text('${previewing?previewCount:savedCount} / 5개'",
+    "Text('${previewing?previewCount:savedCount} / ${widget.dailyTriggered?1:5}개'")
+replace("lib/auto_batch.dart",
+    "value:(previewing?previewCount:savedCount)/5,",
+    "value:(previewing?previewCount:savedCount)/(widget.dailyTriggered?1:5),")
+replace("lib/auto_batch.dart",
     "   if(exitRequested&&mounted)Navigator.pop(context);",
     """   if(widget.dailyTriggered&&!reportedDaily){
      reportedDaily=true;
