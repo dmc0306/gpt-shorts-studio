@@ -7,6 +7,14 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.content.pm.ServiceInfo
+import androidx.work.ForegroundInfo
+import io.flutter.plugin.common.MethodChannel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.coroutines.resume
+import kotlinx.coroutines.suspendCancellableCoroutine
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -34,13 +42,27 @@ object AndroidDailyScheduler {
     private const val HOUR = "hour"
     private const val MINUTE = "minute"
     private const val LAST_NOTICE = "last_notice_date"
+    private const val CREATORS = "licensed_creators"
+    private const val RIGHTS = "rights_attested"
+    private const val LAST_RESULT = "last_result"
     private val SEOUL = ZoneId.of("Asia/Seoul")
 
-    fun configure(context:Context, enabled:Boolean, hour:Int, minute:Int):Map<String,Any> {
+    fun configure(context:Context, enabled:Boolean, hour:Int, minute:Int,
+                  creators:String, rights:Boolean):Map<String,Any> {
         require(hour in 0..23 && minute in 0..59){"유효한 시각을 입력해 주세요."}
+        val handles=creators.split(",").map{it.trim().removePrefix("@")}
+            .filter{it.isNotEmpty()}.map{it.lowercase()}
+        require(handles.size in 0..20 && handles.all{
+            Regex("[a-z0-9._]{2,24}").matches(it)
+        }){"사용 권한이 있는 TikTok 계정을 쉼표로 구분해 입력해 주세요."}
+        if(enabled)require(rights&&handles.isNotEmpty()){
+            "매일 자동 공개에는 재사용 허가 계정과 권리 확인이 필요합니다."
+        }
         val prefs=context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
         check(prefs.edit().putBoolean(ENABLED,enabled)
-            .putInt(HOUR,hour).putInt(MINUTE,minute).commit()){"예약 저장 실패"}
+            .putInt(HOUR,hour).putInt(MINUTE,minute)
+            .putString(CREATORS,handles.joinToString(","))
+            .putBoolean(RIGHTS,rights).commit()){"예약 저장 실패"}
         val manager=WorkManager.getInstance(context)
         if(!enabled){
             manager.cancelUniqueWork(WORK_NAME)
@@ -72,8 +94,22 @@ object AndroidDailyScheduler {
             "hour" to prefs.getInt(HOUR,9),
             "minute" to prefs.getInt(MINUTE,0),
             "lastNoticeDate" to (prefs.getString(LAST_NOTICE,"") ?: ""),
-            "mode" to "notification_fallback",
+            "lastResult" to (prefs.getString(LAST_RESULT,"") ?: ""),
+            "creators" to (prefs.getString(CREATORS,"") ?: ""),
+            "rightsAttested" to prefs.getBoolean(RIGHTS,false),
+            "mode" to "in_process_background_or_notification",
         )
+    }
+
+    fun creatorList(context:Context):List<String>{
+        val prefs=context.getSharedPreferences(PREF_NAME,Context.MODE_PRIVATE)
+        if(!prefs.getBoolean(RIGHTS,false))return emptyList()
+        return (prefs.getString(CREATORS,"") ?: "").split(",").filter{it.isNotBlank()}
+    }
+
+    fun record(context:Context,result:String){
+        context.getSharedPreferences(PREF_NAME,Context.MODE_PRIVATE)
+            .edit().putString(LAST_RESULT,result).apply()
     }
 
     fun shouldNotify(context:Context):Boolean{
@@ -104,16 +140,56 @@ class AndroidDailyReminderWorker(
         val pending=PendingIntent.getActivity(
             applicationContext,23,open,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val handles=AndroidDailyScheduler.creatorList(applicationContext)
+        val channelToFlutter=MainActivity.dailyRunChannel
+        if(channelToFlutter!=null && handles.isNotEmpty()){
+            val foreground=Notification.Builder(applicationContext,channel)
+                .setSmallIcon(android.R.drawable.stat_sys_upload)
+                .setContentTitle("쇼츠 1개 자동 제작 진행")
+                .setContentText("원본 검색 → Gemini → 자막 → MP4 → YouTube")
+                .setContentIntent(pending).setOngoing(true).build()
+            try{
+                val types=ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or
+                    (if(Build.VERSION.SDK_INT>=35)
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING else 0)
+                setForeground(ForegroundInfo(804,foreground,types))
+                val result=withTimeoutOrNull(45*60*1000L){
+                    withContext(Dispatchers.Main){
+                        suspendCancellableCoroutine<Boolean>{ continuation ->
+                            channelToFlutter.invokeMethod("startDaily",
+                                mapOf("creators" to handles),
+                                object:MethodChannel.Result {
+                                    override fun success(value:Any?){
+                                        if(continuation.isActive)continuation.resume(value==true)
+                                    }
+                                    override fun error(code:String,message:String?,details:Any?){
+                                        if(continuation.isActive)continuation.resume(false)
+                                    }
+                                    override fun notImplemented(){
+                                        if(continuation.isActive)continuation.resume(false)
+                                    }
+                                })
+                        }
+                    }
+                }
+                if(result==true){
+                    AndroidDailyScheduler.record(applicationContext,"성공: Youtube 업로드 접수")
+                    return Result.success()
+                }
+                AndroidDailyScheduler.record(applicationContext,"자동 제작 실패 또는 Android 작업 중단")
+            }catch(_:Exception){
+                AndroidDailyScheduler.record(applicationContext,"Android 백그라운드 실행 제한")
+            }
+        }else{
+            AndroidDailyScheduler.record(applicationContext,
+                "앱 프로세스가 종료되어 사용자 실행 대기")
+        }
         val note=Notification.Builder(applicationContext,channel)
             .setSmallIcon(android.R.drawable.stat_notify_more)
-            .setContentTitle("예약된 쇼츠 자동 제작 시작")
-            .setContentText("영상을 찾고 제작하려면 눌러서 앱을 열어 주세요.")
-            .setStyle(Notification.BigTextStyle().bigText(
-                "기기 백그라운드 알림이 도착했습니다. " +
-                "영상 검색·Gemini·렌더링·공개 업로드는 아직 자동 시작되지 않습니다."))
-            .setContentIntent(pending)
-            .setAutoCancel(true).build()
-        notifications.notify(804,note)
+            .setContentTitle("오늘의 쇼츠 제작을 확인해 주세요")
+            .setContentText("자동 실행이 완료되지 않았어요. 눌러서 앱에서 확인하세요.")
+            .setContentIntent(pending).setAutoCancel(true).build()
+        notifications.notify(805,note)
         return Result.success()
     }
 }
