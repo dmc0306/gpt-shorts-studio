@@ -1,0 +1,28 @@
+name: Inspect local Android scheduling integration
+on:
+  push:
+    branches: [feat/android-local-background-daily-20261114]
+    paths: ['.github/workflows/inspect-android-local-scheduling.yml']
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect Android and Flutter implementation
+        run: |
+          unzip -q shorts-studio-source.zip -d app
+          cd app
+          echo '== BATCH SERVICE =='
+          cat native/android/BatchService.kt
+          echo '== MAIN ACTIVITY DECLARATIONS / CHANNELS =='
+          rg -n '^(class|data class)|configureFlutterEngine|setMethodCallHandler|MethodChannel|fun |override fun|batch|export|scanOriginalText|loadAiSettings|saveAiSettings|download' native/android/MainActivity.kt | head -260
+          echo '== MAIN ACTIVITY 1 =='
+          sed -n '1,240p' native/android/MainActivity.kt
+          echo '== MAIN ACTIVITY 2 =='
+          sed -n '241,500p' native/android/MainActivity.kt
+          echo '== BATCH DART BUILD / METHODS =='
+          rg -n 'Future<void> start|Future<void> uploadCompleted|Future<void> render|Future<void> scanVisible|while\(saved|checkpoints|batchStart|savedCount|GeminiCaptions|MixedDiscovery|TikTokDownloader|Native.call' lib/auto_batch.dart | head -125
+          echo '== GEMINI AND DISCOVERY INTERFACES =='
+          rg -n 'class GeminiCaptions|Future<|static |class MixedDiscovery|class TikTokDownloader|class Clip' lib/ai.dart lib/discovery.dart lib/tiktok_download.dart lib/model.dart | head -180
