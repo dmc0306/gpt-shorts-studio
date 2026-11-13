@@ -81,7 +81,7 @@ text=text[:start]+'''        ExpansionTile(
                 icon:const Icon(Icons.schedule_outlined),
                 label:const Text('기기 내 예약 시간 설정'),
               ),
-            ]))),
+            ])),
           ],
         ),
 ''' +text[end:]
