@@ -63,7 +63,7 @@ class _DailyLocalSettingsScreenState extends State<DailyLocalSettingsScreen>{
         minute=(data['minute'] as num?)?.toInt()??m;
         last=data['lastNoticeDate'] as String? ?? '';
         result=data['lastResult'] as String? ?? '';
-        message=enabled?'매일 예약 알림이 설정됐어요.':'예약 알림을 껐어요.';
+        message=enabled?'매일 자동 제작 시도가 예약됐어요.':'예약 실행을 껐어요.';
       });
     }catch(e){
       if(mounted)setState(()=>message='예약 설정 실패: $e');
@@ -82,7 +82,7 @@ class _DailyLocalSettingsScreenState extends State<DailyLocalSettingsScreen>{
     final twoMin=minute.toString().padLeft(2,'0');
     final colors=Theme.of(context).colorScheme;
     return Scaffold(
-      appBar:AppBar(title:const Text('기기 백그라운드 예약')),
+      appBar:AppBar(title:const Text('휴대폰 자동 제작 예약')),
       body:loading?const Center(child:CircularProgressIndicator()):
         ListView(padding:const EdgeInsets.all(18),children:[
           Card(child:Padding(padding:const EdgeInsets.all(18),
@@ -93,7 +93,7 @@ class _DailyLocalSettingsScreenState extends State<DailyLocalSettingsScreen>{
               const Text('한국 시간 · Android WorkManager'),
               SwitchListTile.adaptive(
                 contentPadding:EdgeInsets.zero,
-                title:const Text('매일 예약 알림'),
+                title:const Text('매일 자동 제작 예약'),
                 subtitle:const Text('앱 프로세스가 살아 있으면 자동 제작을 시도하고, '
                     '종료된 상태에서는 실행 알림을 보냅니다.'),
                 value:enabled,
