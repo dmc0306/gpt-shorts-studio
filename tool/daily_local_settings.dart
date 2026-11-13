@@ -9,9 +9,10 @@ class DailyLocalSettingsScreen extends StatefulWidget {
 }
 
 class _DailyLocalSettingsScreenState extends State<DailyLocalSettingsScreen>{
-  bool enabled=false,loading=true,saving=false;
+  bool enabled=false,loading=true,saving=false,rights=false;
   int hour=9,minute=0;
-  String last='',message='';
+  final creatorText=TextEditingController();
+  String last='',result='',message='';
 
   @override void initState(){
     super.initState();
@@ -27,9 +28,17 @@ class _DailyLocalSettingsScreenState extends State<DailyLocalSettingsScreen>{
         hour=(data['hour'] as num?)?.toInt()??9;
         minute=(data['minute'] as num?)?.toInt()??0;
         last=data['lastNoticeDate'] as String? ?? '';
+        result=data['lastResult'] as String? ?? '';
+        creatorText.text=data['creators'] as String? ?? '';
+        rights=data['rightsAttested']==true;
         loading=false;
       });
     }catch(e){if(mounted)setState(()=>loading=false);}
+  }
+
+  @override void dispose(){
+    creatorText.dispose();
+    super.dispose();
   }
 
   Future<void> _save(bool nextEnabled,int h,int m)async{
@@ -37,11 +46,15 @@ class _DailyLocalSettingsScreenState extends State<DailyLocalSettingsScreen>{
     setState(()=>saving=true);
     try{
       if(nextEnabled){
+        if(!rights||creatorText.text.trim().isEmpty){
+          throw StateError('재게시 허가된 제작자 계정과 권리 확인이 필요합니다.');
+        }
         final ok=await Native.call<bool>('batchNotifications');
         if(ok!=true)throw StateError('알림 권한이 필요합니다.');
       }
       final data=await Native.call<Map<dynamic,dynamic>>('dailyScheduleConfigure',{
         'enabled':nextEnabled,'hour':h,'minute':m,
+        'creators':creatorText.text.trim(),'rights':rights,
       })??{};
       if(!mounted)return;
       setState((){
@@ -49,6 +62,7 @@ class _DailyLocalSettingsScreenState extends State<DailyLocalSettingsScreen>{
         hour=(data['hour'] as num?)?.toInt()??h;
         minute=(data['minute'] as num?)?.toInt()??m;
         last=data['lastNoticeDate'] as String? ?? '';
+        result=data['lastResult'] as String? ?? '';
         message=enabled?'매일 예약 알림이 설정됐어요.':'예약 알림을 껐어요.';
       });
     }catch(e){
@@ -80,18 +94,34 @@ class _DailyLocalSettingsScreenState extends State<DailyLocalSettingsScreen>{
               SwitchListTile.adaptive(
                 contentPadding:EdgeInsets.zero,
                 title:const Text('매일 예약 알림'),
-                subtitle:const Text('휴대폰에서 예약 시각에 작업을 알려줍니다.'),
+                subtitle:const Text('앱 프로세스가 살아 있으면 자동 제작을 시도하고, '
+                    '종료된 상태에서는 실행 알림을 보냅니다.'),
                 value:enabled,
                 onChanged:saving?null:(v)=>_save(v,hour,minute)),
               OutlinedButton.icon(
                 onPressed:saving?null:_pickTime,
                 icon:const Icon(Icons.schedule),
                 label:const Text('시작 시각 변경')),
+              const SizedBox(height:10),
+              TextField(controller:creatorText,
+                enabled:!saving && !enabled,
+                decoration:const InputDecoration(
+                  labelText:'재게시 허가된 TikTok 제작자 계정',
+                  hintText:'mychannel, partnerchannel',
+                  helperText:'@ 없이 쉼표로 구분 · 본인 소유 또는 재사용 허가 계정만',
+                  border:OutlineInputBorder())),
+              CheckboxListTile(
+                contentPadding:EdgeInsets.zero,
+                title:const Text('위 계정의 영상 수정·재게시 권한이 있습니다'),
+                value:rights,
+                onChanged:saving||enabled?null:(v)=>setState(()=>rights=v??false)),
               if(last.isNotEmpty)...[
                 const SizedBox(height:8),
                 Text('마지막 알림: $last',
                   style:TextStyle(fontSize:12,color:colors.onSurfaceVariant)),
-              ]
+              ],
+              if(result.isNotEmpty)Text('최근 실행 결과: $result',
+                style:TextStyle(fontSize:12,color:colors.onSurfaceVariant)),
             ]))),
           const SizedBox(height:14),
           Card(color:colors.surfaceContainerLow,
@@ -104,10 +134,12 @@ class _DailyLocalSettingsScreenState extends State<DailyLocalSettingsScreen>{
                   style:TextStyle(fontWeight:FontWeight.w700)))
               ]),
               const SizedBox(height:8),
-              const Text('이 설정은 휴대폰 자체에서 작동하며 GitHub Actions를 사용하지 않습니다. '
-                '하지만 아직 백그라운드에서 새 영상을 자동 검색·제작·업로드하지는 않습니다. '
-                '예약 시각에는 알림이 도착하고, 알림을 눌러 앱에서 '
-                '「혼합 영상 자동 제작」을 실행해야 합니다.'),
+              const Text('GitHub Actions 없이 휴대폰에서 실행합니다. '
+                '앱 화면을 닫더라도 프로세스가 유지되면 예약 시각에 '
+                '영상 검색→기존 자막 검사→Gemini→MP4→YouTube 업로드를 '
+                '1회 시도합니다. 완전히 종료되거나 시스템에 의해 프로세스가 '
+                '제거되면 자동 제작을 보장할 수 없고 확인 알림을 표시합니다. '
+                '유튜브 채널 설정의 MP4 자동 업로드를 먼저 활성화해 주세요.'),
               const SizedBox(height:8),
               const Text('정확한 시각에 실행되지 않을 수 있으며, '
                 '절전 모드·강제 종료·통신 제한에서는 알림이 지연되거나 빠질 수 있어요.',
