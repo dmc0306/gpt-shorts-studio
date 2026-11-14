@@ -67,6 +67,17 @@ def schedule_due(config: dict, state: dict, now: datetime, *, manual: bool = Fal
         return True, today, "manual"
     hour, minute = parse_clock(config["run_time"])
     due = local.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    not_before = config.get("not_before")
+    if not_before:
+        try:
+            activation = datetime.fromisoformat(str(not_before).replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise SetupError("예약 활성화 시각 형식이 잘못됐습니다.") from exc
+        if activation.tzinfo is None:
+            raise SetupError("예약 활성화 시각에 타임존이 필요합니다.")
+        # Changing/enabling a schedule after today's slot must not backfill it.
+        if due.astimezone(timezone.utc) < activation:
+            return False, today, "awaiting_next_slot"
     if local < due:
         return False, today, "too_early"
     # Cron execution can be delayed, but an overnight backfill is unwanted.

@@ -30,8 +30,8 @@ class UploadUncertain(RuntimeError):
 
 
 ROOT = Path(__file__).resolve().parent
-CONFIG = ROOT / "daily_config.json"
-STATE = ROOT / "daily_state.json"
+CONFIG = Path(os.environ.get("SHORTS_CONFIG_PATH", str(ROOT / "daily_config.json"))).expanduser()
+STATE = Path(os.environ.get("SHORTS_STATE_PATH", str(ROOT / "daily_state.json"))).expanduser()
 PROMPT = ROOT / "gemini_title_prompt_ko.txt"
 
 
@@ -45,6 +45,7 @@ def load_json(path: Path) -> dict:
 
 
 def atomic_write(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_suffix(path.suffix + ".tmp")
     temp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     temp.replace(path)
@@ -55,7 +56,7 @@ def env_required() -> dict:
             "YOUTUBE_CLIENT_SECRET", "YOUTUBE_REFRESH_TOKEN")
     missing = [key for key in keys if not os.getenv(key)]
     if missing:
-        raise SetupError("GitHub Actions Secrets 누락: " + ", ".join(missing))
+        raise SetupError("자동 실행 환경 변수 누락: " + ", ".join(missing))
     return {key: os.environ[key] for key in keys}
 
 
