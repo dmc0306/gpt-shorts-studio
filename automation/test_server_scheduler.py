@@ -14,7 +14,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import run_due
 from configure_local import apply_settings
-from daily_core import SetupError
+from daily_core import SetupError, schedule_due
 
 
 CONFIG = {
@@ -59,6 +59,21 @@ class LocalConfigTests(unittest.TestCase):
             publish_mode="public", public_approved=True))
         self.assertTrue(updated["public_approved"])
         self.assertEqual(updated["publish_mode"], "public")
+
+    def test_new_activation_after_slot_waits_until_next_day(self):
+        late = {**CONFIG, "not_before": "2026-11-12T05:00:00+00:00"}
+        due, day, reason = schedule_due(
+            late, {}, datetime(2026, 11, 12, 5, 1, tzinfo=timezone.utc))
+        self.assertEqual((due, day, reason),
+                         (False, "2026-11-12", "awaiting_next_slot"))
+        due, day, reason = schedule_due(
+            late, {}, datetime(2026, 11, 13, 0, 1, tzinfo=timezone.utc))
+        self.assertEqual((due, day, reason),
+                         (True, "2026-11-13", "scheduled"))
+
+    def test_invalid_activation_timestamp_fails_closed(self):
+        with self.assertRaises(SetupError):
+            schedule_due({**CONFIG, "not_before": "incorrect"}, {}, NOW)
 
     def test_rights_revocation_disables_daily_upload(self):
         updated = apply_settings(CONFIG, form(rights_revoked=True))
