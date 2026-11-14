@@ -59,6 +59,25 @@ replace("lib/daily_local_settings.dart",
     "'제거되면 자동 제작을 보장할 수 없고 확인 알림을 표시합니다. '",
     "'배터리 절전으로 실행을 제한하면 실패 알림을 표시합니다. '")
 
+# The AOT Flutter root library must own the named secondary entrypoint.
+# Importing a Dart file alone is not enough for DartExecutor to locate it.
+replace("lib/main.dart",
+    "import 'auto_batch.dart';",
+    "import 'auto_batch.dart';\\nimport 'daily_headless_runner.dart' as daily_worker;")
+main_file=changes.get("lib/main.dart",files["lib/main.dart"]).decode()
+if "void dailyHeadlessMain()" in main_file:
+    raise RuntimeError("Headless entrypoint already exists in main.dart")
+main_file += """
+
+// Invoked by a WorkManager-owned FlutterEngine; no Activity or Navigator.
+@pragma('vm:entry-point')
+void dailyHeadlessMain(){
+  WidgetsFlutterBinding.ensureInitialized();
+  unawaited(daily_worker.DailyHeadlessRunner().run());
+}
+"""
+changes["lib/main.dart"]=main_file.encode()
+
 new_files={
     "lib/daily_headless_runner.dart":Path("tool/daily_headless_runner.dart").read_bytes(),
     "native/android/HeadlessDailyMedia.kt":Path("tool/HeadlessDailyMedia.kt").read_bytes(),
