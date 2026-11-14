@@ -141,48 +141,42 @@ class AndroidDailyReminderWorker(
             applicationContext,23,open,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val handles=AndroidDailyScheduler.creatorList(applicationContext)
-        val channelToFlutter=MainActivity.dailyRunChannel
-        if(channelToFlutter!=null && handles.isNotEmpty()){
+        if(handles.isNotEmpty()){
             val foreground=Notification.Builder(applicationContext,channel)
                 .setSmallIcon(android.R.drawable.stat_sys_upload)
-                .setContentTitle("쇼츠 1개 자동 제작 진행")
-                .setContentText("원본 검색 → Gemini → 자막 → MP4 → YouTube")
+                .setContentTitle("매일 쇼츠 1개 자동 제작")
+                .setContentText("원본 검색 · Gemini · MP4 · YouTube 업로드")
                 .setContentIntent(pending).setOngoing(true).build()
             try{
                 val types=ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or
                     (if(Build.VERSION.SDK_INT>=35)
                         ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING else 0)
                 setForeground(ForegroundInfo(804,foreground,types))
-                val result=withTimeoutOrNull(45*60*1000L){
-                    withContext(Dispatchers.Main){
-                        suspendCancellableCoroutine<Boolean>{ continuation ->
-                            channelToFlutter.invokeMethod("startDaily",
-                                mapOf("creators" to handles),
-                                object:MethodChannel.Result {
-                                    override fun success(value:Any?){
-                                        if(continuation.isActive)continuation.resume(value==true)
-                                    }
-                                    override fun error(code:String,message:String?,details:Any?){
-                                        if(continuation.isActive)continuation.resume(false)
-                                    }
-                                    override fun notImplemented(){
-                                        if(continuation.isActive)continuation.resume(false)
-                                    }
-                                })
-                        }
-                    }
+                val success=AndroidHeadlessDailyRunner.execute(
+                    applicationContext,handles
+                ){stage->
+                    AndroidDailyScheduler.record(applicationContext,"진행: $stage")
                 }
-                if(result==true){
-                    AndroidDailyScheduler.record(applicationContext,"성공: Youtube 업로드 접수")
+                if(success){
+                    AndroidDailyScheduler.record(applicationContext,
+                        "성공: YouTube에 새 쇼츠 1개 업로드 접수")
+                    notifications.notify(805,Notification.Builder(
+                        applicationContext,channel)
+                        .setSmallIcon(android.R.drawable.stat_sys_upload_done)
+                        .setContentTitle("오늘 쇼츠 1개 업로드 완료")
+                        .setContentText("YouTube 채널에서 상태를 확인해 주세요.")
+                        .setContentIntent(pending).setAutoCancel(true).build())
                     return Result.success()
                 }
-                AndroidDailyScheduler.record(applicationContext,"자동 제작 실패 또는 Android 작업 중단")
+                AndroidDailyScheduler.record(applicationContext,
+                    "실패: 조건에 맞는 새 영상이 없거나 업로드가 완료되지 않았어요.")
             }catch(_:Exception){
-                AndroidDailyScheduler.record(applicationContext,"Android 백그라운드 실행 제한")
+                AndroidDailyScheduler.record(applicationContext,
+                    "실패: Android 백그라운드 제한 또는 실행 오류")
             }
         }else{
             AndroidDailyScheduler.record(applicationContext,
-                "앱 프로세스가 종료되어 사용자 실행 대기")
+                "실패: 재게시 허가 계정이 등록되지 않았어요.")
         }
         val note=Notification.Builder(applicationContext,channel)
             .setSmallIcon(android.R.drawable.stat_notify_more)
