@@ -1,0 +1,24 @@
+name: Package standalone Android headless daily producer
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tool/patch_android_daily_headless.py'
+      - '.github/workflows/apply-headless-daily.yml'
+permissions: {contents: write}
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: true}
+      - name: Package new background engine
+        run: python3 tool/patch_android_daily_headless.py
+      - name: Commit versioned app
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add shorts-studio-source.zip
+          git diff --cached --quiet && exit 0
+          git commit -m "Package v0.21.26 standalone Android background producer"
+          git push
