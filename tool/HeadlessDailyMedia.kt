@@ -130,7 +130,7 @@ class HeadlessDailyMedia(private val context:Context,engine:FlutterEngine) {
         val seen=(0 until arr.length()).map{arr.optString(it)}.toMutableSet()
         check(seen.add(videoId)){"이미 이전에 사용한 영상입니다."}
         val compact=JSONArray()
-        seen.takeLast(1200).forEach{compact.put(it)}
+        seen.toList().takeLast(1200).forEach{compact.put(it)}
         state.put("usedVideoIds",compact)
         state.put("pendingSourceId",videoId)
         saveHistory(state)
