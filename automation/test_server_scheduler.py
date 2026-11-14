@@ -98,10 +98,9 @@ class SystemdRunnerTests(unittest.TestCase):
             patch.object(run_due, "datetime"),
         ]
         for p in self.patches:
-            mocked = p.start()
+            p.start()
             self.addCleanup(p.stop)
-            if p.attribute == "datetime":
-                mocked.now.return_value = NOW
+        run_due.datetime.now.return_value = NOW
 
     def test_before_daily_time_never_launches(self):
         config = {**CONFIG, "run_time": "09:30"}
