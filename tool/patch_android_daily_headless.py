@@ -29,12 +29,18 @@ replace("tool/bootstrap.py",
 replace("lib/youtube_settings.dart",
     "앱 프로세스가 살아 있으면",
     "앱을 열지 않아도 예약 실행기가")
-replace("lib/youtube_settings.dart",
-    "'완전히 종료된 앱을 화면 없이 다시 실행할 수는 없으며, '",
-    "'앱 강제 중지·절전 등 Android 제약 시 자동 실행이 지연되거나 실패할 수 있으며, '")
-replace("lib/youtube_settings.dart",
-    "'이 경우에는 수동 시작 안내 알림으로 전환됩니다.'",
-    "'실패 시 확인 알림을 표시합니다.'")
+# Different installed settings screen layouts use slightly different Korean
+# word wrapping, so update the optional explanatory text without asserting
+# the entire literal fragment is present.
+settings=changes.get("lib/youtube_settings.dart",files["lib/youtube_settings.dart"]).decode()
+settings=settings.replace(
+    "완전히 종료된 앱을 화면 없이 다시 실행할 수는 없으며,",
+    "Android가 앱 실행을 제한하면 예약 작업이 지연되거나 실패할 수 있으며,"
+).replace(
+    "이 경우에는 수동 시작 안내 알림으로 전환됩니다.",
+    "실패 시 확인 알림을 표시합니다."
+)
+changes["lib/youtube_settings.dart"]=settings.encode()
 
 # WorkManager engine no longer depends on MainActivity/Flutter UI liveness.
 replace("lib/daily_local_settings.dart",
