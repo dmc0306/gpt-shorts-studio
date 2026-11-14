@@ -1,3 +1,5 @@
+> **GitHub Actions 없이 자동으로 제작·업로드하려면 [Linux 백그라운드 설치 가이드](LOCAL_BACKGROUND_ko.md)를 사용하세요.** 아래는 과거 GitHub Actions 방식에 대한 기록이며, 사용자가 선택한 서버 실행 방식과 다릅니다.
+
 # Short Studio — 매일 1개 영상 자동 검색·제작·YouTube 업로드
 
 이 문서는 **새 클라우드 자동화** 안내입니다. 기존 앱의 '예약 공개'와 다릅니다.
