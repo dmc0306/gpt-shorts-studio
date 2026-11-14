@@ -63,7 +63,8 @@ replace("lib/daily_local_settings.dart",
 # Importing a Dart file alone is not enough for DartExecutor to locate it.
 replace("lib/main.dart",
     "import 'auto_batch.dart';",
-    "import 'auto_batch.dart';\\nimport 'daily_headless_runner.dart' as daily_worker;")
+    "import 'auto_batch.dart';" + chr(10) +
+    "import 'daily_headless_runner.dart' as daily_worker;")
 main_file=changes.get("lib/main.dart",files["lib/main.dart"]).decode()
 if "void dailyHeadlessMain()" in main_file:
     raise RuntimeError("Headless entrypoint already exists in main.dart")
