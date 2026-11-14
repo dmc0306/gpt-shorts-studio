@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from daily_core import SetupError, validate_config
@@ -42,6 +43,11 @@ def apply_settings(config: dict, args: argparse.Namespace) -> dict:
         new["enabled"] = False
     if args.public_approved:
         new["public_approved"] = True
+    # A newly activated (or rescheduled) job begins no earlier than now.
+    if (new.get("enabled") and
+            (not config.get("enabled") or
+             new.get("run_time") != config.get("run_time"))):
+        new["not_before"] = datetime.now(timezone.utc).isoformat()
     # Keep immediate public posting opt-in distinct from rights confirmation.
     if new.get("enabled") and new.get("publish_mode") == "public":
         if not new.get("public_approved"):
