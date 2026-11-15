@@ -145,15 +145,16 @@ class _YouTubeBatchPublishState extends State<YouTubeBatchPublishScreen>{
       }catch(e){
         attempted++;
         failed++;
-        lastFailure=youtubeError(e);
+        final errorText=youtubeError(e);
+        lastFailure=errorText;
         if(!mounted)break;
         setState((){
           needsReconnect=youtube.chromeMode&&
-            (lastFailure!.contains('AUTH_CHROME')||
-             lastFailure.contains('Chrome')||lastFailure.contains('인증'));
-          results[item.id]='업로드 실패 · $lastFailure';
+            (errorText.contains('AUTH_CHROME')||
+             errorText.contains('Chrome')||errorText.contains('인증'));
+          results[item.id]='업로드 실패 · $errorText';
           message='전송 중단 · 이 영상은 유튜브에 게시됐다고 확인할 수 없습니다.\n'
-            '원인: $lastFailure';
+            '원인: $errorText';
         });
         break; // Unknown result: never auto-retry/upload following items.
       }
