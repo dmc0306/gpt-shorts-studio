@@ -3,6 +3,9 @@ import 'model.dart';
 import 'youtube.dart';
 import 'youtube_channel.dart';
 import 'youtube_publish_plan.dart';
+import 'youtube_batch_outcome.dart';
+import 'youtube_settings.dart';
+import 'youtube_upload.dart';
 
 /// Uploads finished MP4s while this screen remains active, creating YouTube
 /// server-side publishAt schedules. No claim of offline/background uploading.
@@ -17,7 +20,7 @@ class _YouTubeBatchPublishState extends State<YouTubeBatchPublishScreen>{
   final picked=<String>{};
   final results=<String,String>{};
   final uploaded=<String>{};
-  bool loading=true,running=false,cancelRequested=false;
+  bool loading=true,running=false,cancelRequested=false,needsReconnect=false;
   String message='';
   String? active;
 
@@ -56,9 +59,36 @@ class _YouTubeBatchPublishState extends State<YouTubeBatchPublishScreen>{
 
   Future<void> _uploadBatch()async{
     if(running||loading||picked.isEmpty||youtube.uploading)return;
+    // Authenticate BEFORE showing a YouTube-side scheduling confirmation.
+    // A saved channel label is not proof that Chrome has a working token.
+    try{
+      await youtube.initialize();
+      if(youtube.chromeMode){
+        await youtube.chrome.load();
+        if(!youtube.chrome.hasGrant||!youtube.chrome.hasRefreshToken){
+          throw const YouTubeFailure(
+            'Chrome 인증·갱신 권한을 확인하지 못했습니다. 유튜브 채널을 다시 연결해 주세요.');
+        }
+        await youtube.chrome.token(forceRefresh:true);
+      }
+      await youtube.refreshChannel();
+    }catch(e){
+      if(!mounted)return;
+      setState((){
+        needsReconnect=youtube.chromeMode;
+        message='업로드 0개 · 인증/채널 확인 실패. '
+          '아래 재연결 버튼을 이용해 주세요.\n원인: ${youtubeError(e)}';
+      });
+      return;
+    }
+    if(!mounted)return;
     final p=youtube.preferences;
     if(!p.confirmed||(p.publishMode!='private'&&!p.publicApproved)){
-      setState(()=>message='업로드 채널과 공개 권한을 유튜브 설정에서 먼저 확인해 주세요.');
+      setState((){
+        needsReconnect=youtube.chromeMode;
+        message='업로드 0개 · 채널 또는 공개 권한 확인이 필요합니다. '
+          '유튜브 설정에서 채널을 다시 확인해 주세요.';
+      });
       return;
     }
     final items=finished.where((c)=>picked.contains(c.id)&&!uploaded.contains(c.id))
@@ -91,6 +121,8 @@ class _YouTubeBatchPublishState extends State<YouTubeBatchPublishScreen>{
       results.clear();
       message='전송 시작';
     });
+    int succeeded=0,failed=0,attempted=0;
+    String? lastFailure;
     for(final item in items){
       if(cancelRequested)break;
       if(!mounted)break;
@@ -100,27 +132,41 @@ class _YouTubeBatchPublishState extends State<YouTubeBatchPublishScreen>{
       });
       try{
         final id=await youtube.uploadClip(item);
+        if(id.isEmpty)throw const YouTubeFailure(
+          'YouTube에서 영상 ID를 확인하지 못했습니다. 예약 등록을 확인할 수 없습니다.');
+        attempted++;
+        succeeded++;
         if(!mounted)break;
         setState((){
           uploaded.add(item.id);
           picked.remove(item.id);
-          results[item.id]='전송 접수 · https://www.youtube.com/watch?v=$id';
+          results[item.id]='YouTube 영상 ID 확인 · https://www.youtube.com/watch?v=$id';
         });
       }catch(e){
+        attempted++;
+        failed++;
+        final errorText=youtubeError(e);
+        lastFailure=errorText;
         if(!mounted)break;
         setState((){
-          results[item.id]='업로드 실패 · ${youtubeError(e)}';
-          message='중단됨 · 실패한 영상과 남은 영상은 앱에 유지돼요.';
+          needsReconnect=youtube.chromeMode&&
+            (errorText.contains('AUTH_CHROME')||
+             errorText.contains('Chrome')||errorText.contains('인증'));
+          results[item.id]='업로드 실패 · $errorText';
+          message='전송 중단 · 이 영상은 유튜브에 게시됐다고 확인할 수 없습니다.\n'
+            '원인: $errorText';
         });
-        break; // Avoid flooding quota and disturbing order on failure.
+        break; // Unknown result: never auto-retry/upload following items.
       }
     }
     if(!mounted)return;
     setState((){
       active=null;
       running=false;
-      message=cancelRequested?'전송 중단 · 남은 영상은 그대로 유지돼요.':
-        '선택한 영상의 전송 시도를 마쳤어요. 공개/처리 상태는 YouTube Studio에서도 확인해 주세요.';
+      message=youtubeBatchOutcomeMessage(
+        succeeded:succeeded,failed:failed,
+        unattempted:items.length-attempted,cancelled:cancelRequested)
+        +(lastFailure==null?'':'\n오류: $lastFailure');
     });
   }
 
@@ -184,7 +230,7 @@ class _YouTubeBatchPublishState extends State<YouTubeBatchPublishScreen>{
               controlAffinity:ListTileControlAffinity.leading,
             ),
           if(uploaded.isNotEmpty)
-            ExpansionTile(title:Text('업로드 완료 또는 기존 전송 ${uploaded.length}개'),
+            ExpansionTile(title:Text('YouTube 영상 ID가 확인된 전송 ${uploaded.length}개'),
               children:[
                 for(final clip in finished.where((c)=>uploaded.contains(c.id)))
                   ListTile(dense:true,title:Text(clip.headline.isEmpty?clip.name:clip.headline),
@@ -192,7 +238,8 @@ class _YouTubeBatchPublishState extends State<YouTubeBatchPublishScreen>{
               ]),
           if(items.isNotEmpty&&p.publishMode=='scheduled')...[
             const Divider(height:26),
-            const Text('게시 예정 시간',style:TextStyle(fontWeight:FontWeight.bold)),
+            const Text('업로드 전 예상 공개 시간 · 아직 YouTube 미등록',
+              style:TextStyle(fontWeight:FontWeight.bold)),
             for(var i=0;i<slots.length;i++)
               Padding(padding:const EdgeInsets.symmetric(vertical:3),
                 child:Text('${i+1}. ${_date(slots[i])} · '
@@ -202,7 +249,24 @@ class _YouTubeBatchPublishState extends State<YouTubeBatchPublishScreen>{
           const SizedBox(height:12),
           if(running)LinearProgressIndicator(value:youtube.progress),
           if(message.isNotEmpty)Padding(
-            padding:const EdgeInsets.symmetric(vertical:8),child:Text(message)),
+            padding:const EdgeInsets.symmetric(vertical:8),
+            child:SelectableText(message)),
+          if(needsReconnect)
+            OutlinedButton.icon(
+              onPressed:running?null:()async{
+                await Navigator.of(context).push(MaterialPageRoute(
+                  builder:(_)=>YouTubeSettingsScreen(clips:widget.clips)));
+                if(!mounted)return;
+                try{
+                  await youtube.chrome.load();
+                  if(mounted)setState(()=>needsReconnect=
+                    !youtube.chrome.hasGrant||!youtube.chrome.hasRefreshToken);
+                }catch(_){
+                  if(mounted)setState(()=>needsReconnect=true);
+                }
+              },
+              icon:const Icon(Icons.open_in_browser),
+              label:const Text('Chrome 유튜브 채널 다시 연결하기')),
           FilledButton.icon(
             onPressed:running||picked.isEmpty||youtube.uploading?null:_uploadBatch,
             icon:const Icon(Icons.cloud_upload_outlined),

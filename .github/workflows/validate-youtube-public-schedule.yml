@@ -1,34 +1,33 @@
-name: Validate public and scheduled YouTube uploads
+name: Validate YouTube upload & scheduling UI
 on:
-  push:
-    branches: [feat/public-scheduled-batch-upload-20261105]
-    paths:
-      - 'tool/patch_youtube_public_schedule.py'
-      - 'tool/youtube_publish_plan.dart'
-      - 'tool/youtube_batch_publish_screen.dart'
-      - 'tool/youtube_schedule_tests.dart'
-      - '.github/workflows/validate-youtube-public-schedule.yml'
   pull_request:
     branches: [main]
     paths:
-      - 'tool/patch_youtube_public_schedule.py'
-      - 'tool/youtube_publish_plan.dart'
+      - 'shorts-studio-source.zip'
       - 'tool/youtube_batch_publish_screen.dart'
-      - 'tool/youtube_schedule_tests.dart'
+      - 'tool/youtube_batch_outcome.dart'
+      - 'tool/youtube_batch_outcome_test.dart'
       - '.github/workflows/validate-youtube-public-schedule.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'shorts-studio-source.zip'
+      - 'tool/youtube_batch_publish_screen.dart'
+      - 'tool/youtube_batch_outcome.dart'
+      - 'tool/youtube_batch_outcome_test.dart'
 permissions:
   contents: read
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-      - name: Apply patch and unpack
+      - name: Extract production source (do not reapply legacy patch)
         run: |
-          python3 tool/patch_youtube_public_schedule.py
           unzip -q shorts-studio-source.zip -d app
-          grep -q '^version: 0.21.22+81' app/pubspec.yaml
+          test -f app/lib/youtube_batch_outcome.dart
+          test -f app/test/youtube_batch_outcome_test.dart
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -37,12 +36,12 @@ jobs:
         with:
           channel: stable
           cache: true
-      - name: Bootstrap app
+      - name: Bootstrap Flutter
         working-directory: app
         run: python3 tool/bootstrap.py
-      - name: Flutter analysis
+      - name: Flutter static analysis
         working-directory: app
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
-      - name: Full Flutter tests
+      - name: YouTube scheduled upload and error-state tests
         working-directory: app
         run: flutter test

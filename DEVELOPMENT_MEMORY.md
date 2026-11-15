@@ -352,3 +352,11 @@ In PR #13 https://github.com/dmc0306/gpt-shorts-studio/pull/13 added Android You
 PR #15 https://github.com/dmc0306/gpt-shorts-studio/pull/15 을 병합하여 Android WorkManager의 실행 경로를 MainActivity.dailyRunChannel 대신 AndroidHeadlessDailyRunner (새 독립 FlutterEngine/AOT named entrypoint)로 변경. Flutter의 root lib/main.dart에 vm:entry-point dailyHeadlessMain() 등록. 별도 lib/daily_headless_runner.dart는 허가된 TikTok 제작자별 Tavily 검색, 5~60초 길이·중복 제외, Gemini quality/scene 5~30초 선택, native ML Kit OCR, 상단/하단 각각 5~11글자, Media3 최종 9:16 렌더, Chrome OAuth 토큰을 통한 YouTube 업로드를 하루 1개만 실행.
 HeadlessDailyMedia.kt는 Activity 의존 없이 Native.call bridge의 AI 설정 Keystore 복호화, TikTok 다운로드 저장/검사, Korean OCR, projects 및 used-source 기록, Media3 title/timed caption overlay, Gallery 저장, YouTube token refresh/업로드 상태 처리. 업로드 전 원본 ID를 먼저 잠그며 중복 업로드 방지. 수동 5개 제작 및 기존 YouTube 공개 정책 유지. Android 원본 작업은 여전히 네트워크/배터리 정책에 따라 실행 시각이 지연될 수 있고, 유효한 허가 영상이 없어 0개 업로드가 될 수 있음. Chrome 연결/키/허가 계정/공개 동의 없으면 fail-closed. 기기 실사용 자동 업로드는 검증되지 않음, CI 빌드 성공과 구별할 것.
 개발 CI https://github.com/dmc0306/gpt-shorts-studio/actions/runs/43543344594 에서 Flutter analyzer, Flutter 전체 테스트, Kotlin/Android debug build 통과. 주석/설정 안내는 ANDROID_LOCAL_DAILY.md에 정리. 버전 패키징 commit 7e22756f85f728c020d6f8b3f791fa8ab8fe9e5b. 이 커밋은 최신 ZIP이 포함된 signed APK 빌드를 다시 트리거한다.
+
+## 2026-11-15 — v0.21.27+86 배치 유튜브 예약 화면 성공 오인 및 Chrome 인증 선확인
+
+- 실기기 캡처: '유튜브 공개·예약 업로드' 화면에 Chrome 재연결 요구 [AUTH_C...]가 나타난 상태에서 '선택한 영상의 전송 시도를 마쳤어요'와 미래 게시 시간 5개가 표시됨. 실제 업로드는 0개. 전체 AUTH 코드는 화면에서 잘려 있어 구체적인 인증 실패 원인은 단정할 수 없음.
+- 직접 코드에서 확인된 UI 오류: YouTubeBatchPublishScreen._uploadBatch는 uploadClip 예외에서 첫 실패 후 break하지만, for 루프 후 성공/실패와 관계없이 동일한 '전송 시도를 마쳤어요' 문구를 설정함. 또한 _slots는 업로드 여부와 무관한 예상 시각으로 표시됨.
+- 해결: 배치 확인 다이얼로그 전에 YouTube.initialize 및 Chrome 영속 인증 상태(load), refresh token 여부, 강제 토큰 갱신, 채널 API 재조회(refreshChannel) 수행; 실패 시 실제 업로드 전 차단하고 전체 오류와 'Chrome 유튜브 채널 다시 연결하기' 버튼 표시.
+- 성공은 YouTube 영상 ID 응답 또는 영속 기록이 확인된 경우만 표시; 오류 시 접수/실패/미전송 개수를 구분하고 다음 영상은 전송하지 않음. 이미 실패한 영상을 자동 재업로드하지 않음. 예약 일정 표제는 '업로드 전 예상 공개 시간 · 아직 YouTube 미등록'으로 수정.
+- Flutter 회귀 테스트로 0 성공/1 실패/4 미전송, 5 성공, 취소, 0 접수 상태 등 검증. 업로드 토큰과 OAuth 리디렉션 내용은 로그에 포함하지 않음. 실제 Google 계정의 새 로그인 성공 여부는 실기기 확인 필요.
