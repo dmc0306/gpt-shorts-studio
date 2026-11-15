@@ -63,7 +63,7 @@ replace("lib/youtube_settings.dart",
     "        if(!youtube.chrome.refreshRejected)\n"
     "          const Text('최초 설정: Google Cloud Android 클라이언트의 Custom URI scheme 허용을 켜고 저장하세요.'),")
 replace("lib/youtube_settings.dart",
-    "           Text(youtube.chrome.hasRefreshToken ? '인증 정보 암호화 저장됨 · 갱신 권한 있음' : '갱신 권한 없음 · 인증 만료 시 재연결 필요'),",
+    "Text(youtube.chrome.hasRefreshToken ? '인증 정보 암호화 저장됨 · 갱신 권한 있음' : '갱신 권한 없음 · 인증 만료 시 재연결 필요'),",
     "           Text(youtube.chrome.refreshRejected\n"
     "             ? '저장된 갱신 토큰이 거부됨 · Chrome 재로그인 필요'\n"
     "             : youtube.chrome.hasRefreshToken\n"
