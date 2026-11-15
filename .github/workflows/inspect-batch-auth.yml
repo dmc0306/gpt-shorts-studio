@@ -1,0 +1,36 @@
+name: Inspect batch upload auth paths (temporary)
+on:
+  push:
+    branches: [fix/youtube-batch-auth-status]
+    paths:
+      - '.github/workflows/inspect-batch-auth.yml'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect shipped archive source (no credentials)
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import zipfile
+          z=zipfile.ZipFile('shorts-studio-source.zip')
+          for name in ['pubspec.yaml','lib/youtube_batch_publish_screen.dart',
+                       'lib/youtube.dart','lib/youtube_upload.dart',
+                       'lib/youtube_chrome.dart','lib/youtube_channel.dart']:
+              print('===== FILE',name,flush=True)
+              lines=z.read(name).decode('utf-8').splitlines()
+              if name in ('lib/youtube_batch_publish_screen.dart','lib/youtube.dart','lib/youtube_upload.dart','lib/youtube_chrome.dart'):
+                  for i,line in enumerate(lines):
+                      if i>=380:break
+                      if name=='lib/youtube_upload.dart' and i>180 and i<250:continue
+                      print(f'{i+1:04d} {line}',flush=True)
+              else:
+                  print('size',len(lines))
+                  for i,line in enumerate(lines):
+                      if name=='pubspec.yaml' and i>=13:break
+                      if name=='lib/youtube_channel.dart' and any(k in line for k in ('auth','confirmed','channelId','publish','refresh')):
+                          print(f'{i+1:04d} {line}')
+          PY
