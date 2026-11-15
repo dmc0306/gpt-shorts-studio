@@ -360,3 +360,11 @@ HeadlessDailyMedia.kt는 Activity 의존 없이 Native.call bridge의 AI 설정 
 - 해결: 배치 확인 다이얼로그 전에 YouTube.initialize 및 Chrome 영속 인증 상태(load), refresh token 여부, 강제 토큰 갱신, 채널 API 재조회(refreshChannel) 수행; 실패 시 실제 업로드 전 차단하고 전체 오류와 'Chrome 유튜브 채널 다시 연결하기' 버튼 표시.
 - 성공은 YouTube 영상 ID 응답 또는 영속 기록이 확인된 경우만 표시; 오류 시 접수/실패/미전송 개수를 구분하고 다음 영상은 전송하지 않음. 이미 실패한 영상을 자동 재업로드하지 않음. 예약 일정 표제는 '업로드 전 예상 공개 시간 · 아직 YouTube 미등록'으로 수정.
 - Flutter 회귀 테스트로 0 성공/1 실패/4 미전송, 5 성공, 취소, 0 접수 상태 등 검증. 업로드 토큰과 OAuth 리디렉션 내용은 로그에 포함하지 않음. 실제 Google 계정의 새 로그인 성공 여부는 실기기 확인 필요.
+
+## 2026-11-16 — Chrome OAuth refresh 2002 invalid_grant, user screenshot
+
+- 실기기 오류: AUTH_CHROME_REFRESH, OAuth type=2, code=2002. AppAuth-Android TokenRequestErrors.INVALID_GRANT = 2002. 이 오류는 OAuth 토큰 갱신의 invalid_grant이며 Google에서 오래된 refresh token을 무효/만료 상태로 판정한 것이지 리디렉션/PKCE 오류가 아님.
+- 원래 코드: YouTubeChromeAuth.kt는 인증 요청 시 prompt="select_account consent", access_type="offline"으로 새 토큰을 요청하고, 토큰 갱신은 AuthState.performActionWithFreshTokens()를 사용함. 따라서 offline 설정 누락이 직접 원인이라는 주장은 근거 없음.
+- 기존 UI에 있던 '인증 정보 암호화 저장됨 · 갱신 권한 있음'은 존재만 표시해서 토큰 유효성을 오인시켰음. 수정: Google invalid_grant를 명시적으로 안내하고, 로컬 refreshRejected 플래그로 검사 실패를 표시하고 새로운 Chrome 인증 성공 시만 해제. 토큰/authorization code/URI는 화면 및 로그에 남기지 않음.
+- 테스트: AUTH_CHROME_REFRESH type2/code2002 에러를 흉내 내어 민감 메시지 미노출, 재동의 후 오류 상태 해제 확인.
+- 사용자 복구: Google Auth Platform Audience에서 External + Testing이면 refresh token 7일 만료 가능 (https://developers.google.com/identity/protocols/oauth2); 운영 게시로 전환 검토 후 Chrome에서 같은 계정/브랜드 채널 재로그인 → 강제 갱신 확인 → 채널 재확인 → 영상 1개 비공개 시험. In production으로 변경해도 이미 무효한 토큰은 재발급 필요.
