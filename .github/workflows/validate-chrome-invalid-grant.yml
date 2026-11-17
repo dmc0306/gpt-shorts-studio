@@ -1,0 +1,53 @@
+name: Validate and package Chrome invalid_grant recovery
+on:
+  push:
+    branches: [fix/chrome-invalid-grant-reconnect]
+    paths:
+      - '.github/workflows/validate-chrome-invalid-grant.yml'
+      - 'tool/patch_chrome_invalid_grant.py'
+permissions:
+  contents: write
+jobs:
+  validate-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+      - name: Patch shipped source and verify result
+        run: |
+          python3 tool/patch_chrome_invalid_grant.py
+          unzip -q shorts-studio-source.zip -d app
+          grep -q '^version: 0.21.28+87' app/pubspec.yaml
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Bootstrap Flutter
+        working-directory: app
+        run: python3 tool/bootstrap.py
+      - name: Analyze
+        working-directory: app
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Run all Flutter tests including invalid_grant regression
+        working-directory: app
+        run: flutter test
+      - name: Compile Android APK
+        working-directory: app
+        run: flutter build apk --debug
+      - name: Persist validated app archive
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add shorts-studio-source.zip
+          git diff --cached --quiet && exit 0
+          git commit -m "Package v0.21.28 Chrome invalid_grant recovery guidance"
+          git fetch origin fix/chrome-invalid-grant-reconnect
+          git rebase origin/fix/chrome-invalid-grant-reconnect
+          git push origin HEAD:fix/chrome-invalid-grant-reconnect

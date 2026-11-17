@@ -1,0 +1,43 @@
+name: Inspect Chrome invalid grant flow (temporary)
+on:
+  push:
+    branches: [fix/chrome-invalid-grant-reconnect]
+    paths:
+      - '.github/workflows/inspect-invalid-grant.yml'
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Print targeted auth logic from shipped source (no secrets)
+        run: |
+          python3 - <<'PY'
+          import zipfile
+          z=zipfile.ZipFile('shorts-studio-source.zip')
+          files=['native/android/YouTubeChromeAuth.kt','lib/youtube_chrome.dart','lib/youtube.dart','lib/youtube_settings.dart','test/youtube_chrome_test.dart','pubspec.yaml']
+          for name in files:
+              if name not in z.namelist():
+                  print('MISSING',name);continue
+              ls=z.read(name).decode('utf-8').splitlines()
+              print('===',name,'total',len(ls))
+              if name=='native/android/YouTubeChromeAuth.kt':
+                  for i,s in enumerate(ls):
+                      if i>360:break
+                      print(f'{i+1:04d}: {s[:250]}')
+              elif name=='lib/youtube_settings.dart':
+                  matches=[i for i,s in enumerate(ls) if any(w in s for w in ('Chrome','크롬','갱신','refresh','연결 해제','connectChrome'))]
+                  indices=set(j for i in matches for j in range(max(0,i-5),min(len(ls),i+7)))
+                  for j in sorted(indices):print(f'{j+1:04d}: {ls[j][:250]}')
+              elif name=='lib/youtube.dart':
+                  for i,s in enumerate(ls[:160]):
+                      print(f'{i+1:04d}: {s[:250]}')
+              elif name=='test/youtube_chrome_test.dart':
+                  for i,s in enumerate(ls[:220]):
+                      print(f'{i+1:04d}: {s[:250]}')
+              elif name=='lib/youtube_chrome.dart':
+                  for i,s in enumerate(ls):
+                      print(f'{i+1:04d}: {s[:250]}')
+              else:
+                  print('version',next((s for s in ls if s.startswith('version:')), 'unknown'))
+          PY
