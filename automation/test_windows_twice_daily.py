@@ -100,7 +100,7 @@ class WindowsTwoSlotTests(unittest.TestCase):
     def test_morning_is_not_evening_attempt(self):
         self.put_state("morning", {"last_attempt_date": "2026-11-12",
                                    "used_sources": ["sample1"]})
-        with patch.object(windows.subprocess, "run") as call:
+        with patch.object(windows.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as call:
             self.assertEqual(windows.run_slot("morning", now=MORNING,
                                               home=self.home), 0)
             call.assert_not_called()
