@@ -67,7 +67,7 @@ class WindowsTwoSlotTests(unittest.TestCase):
         limited = AsciiLimitedConsole()
         windows.report("한국어 상태: 검색→업로드 완료", stream=limited)
         self.assertIn("\\u", "".join(limited.parts))
-        self.assertIn("Shorts", "".join([("Shorts"), *limited.parts]))
+        self.assertIn(": ", "".join(limited.parts))
 
     def test_publish_slots_are_exactly_twelve_hours_apart(self):
         self.assertEqual(
