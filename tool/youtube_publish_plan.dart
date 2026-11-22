@@ -30,7 +30,7 @@ class YouTubePublishPlan {
 }
 
 class YouTubeCadence {
-  static const supportedHours=[24,48,72,168];
+  static const supportedHours=[12,24,48,72,168];
 
   static DateTime nextUtc({
     required DateTime now,
@@ -79,7 +79,7 @@ class YouTubeCadence {
   }
 
   static String label(int intervalHours)=>switch(intervalHours){
-    24=>'매일',48=>'2일마다',72=>'3일마다',168=>'매주',
+    12=>'하루 2회 (12시간 간격)',24=>'매일',48=>'2일마다',72=>'3일마다',168=>'매주',
     _=>'사용자 지정',
   };
 }
