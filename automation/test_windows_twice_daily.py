@@ -50,6 +50,25 @@ class WindowsTwoSlotTests(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(value), encoding="utf-8")
 
+    def test_cp1252_console_never_crashes_on_korean_status(self):
+        class AsciiLimitedConsole:
+            encoding = "cp1252"
+
+            def __init__(self):
+                self.parts = []
+
+            def write(self, data):
+                data.encode(self.encoding)
+                self.parts.append(data)
+
+            def flush(self):
+                pass
+
+        limited = AsciiLimitedConsole()
+        windows.report("한국어 상태: 검색→업로드 완료", stream=limited)
+        self.assertIn("\\u", "".join(limited.parts))
+        self.assertIn("Shorts", "".join([("Shorts"), *limited.parts]))
+
     def test_publish_slots_are_exactly_twelve_hours_apart(self):
         self.assertEqual(
             windows.remaining_margin(MORNING, "morning"),
