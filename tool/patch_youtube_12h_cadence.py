@@ -63,7 +63,7 @@ replace("test/youtube_schedule_test.dart",
 
 # Bump Android version so the new APK is recognized as an update.
 version = files["pubspec.yaml"].decode("utf-8")
-match = re.search(r"(?m)^version: 0\\.21\\.(\\d+)\\+(\\d+)\\s*$", version)
+match = re.search(r"(?m)^version: 0\.21\.(\d+)\+(\d+)\s*$", version)
 if match is None:
     raise RuntimeError("Unexpected existing app version; refusing to overwrite")
 old_version = match.group(0)
