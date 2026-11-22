@@ -31,6 +31,19 @@ KST = ZoneInfo("Asia/Seoul")
 SCRIPT = Path(__file__).resolve().parent / "daily_pipeline.py"
 
 
+def report(message: str, *, stream=None) -> None:
+    """Do not crash on Windows consoles that cannot encode Korean or arrows."""
+    output = stream if stream is not None else sys.stdout
+    value = str(message)
+    encoding = getattr(output, "encoding", None) or "utf-8"
+    try:
+        print(value, file=output, flush=True)
+    except UnicodeEncodeError:
+        # English cp1252 consoles get readable escaped output instead.
+        fallback = value.encode(encoding, errors="backslashreplace").decode(encoding)
+        print(fallback, file=output, flush=True)
+
+
 def app_home() -> Path:
     explicit = os.getenv("SHORTS_WINDOWS_HOME")
     if explicit:
@@ -139,7 +152,7 @@ def run_slot(slot: str, *, dry_run: bool = False, now: datetime | None = None,
     guard = contextlib.nullcontext(True) if dry_run else exclusive_lock(home / "state" / "scheduler.lock")
     with guard as acquired:
         if not acquired:
-            print("다른 Shorts 제작 작업이 진행 중이므로 중복 실행하지 않습니다.")
+            report("다른 Shorts 제작 작업이 진행 중이므로 중복 실행하지 않습니다.")
             return 0
 
         base = load_json(config_file)
@@ -158,7 +171,7 @@ def run_slot(slot: str, *, dry_run: bool = False, now: datetime | None = None,
             due, reason = False, "publish_deadline_passed"
 
         if dry_run or not due:
-            print(f"{day} {slot}: " +
+            report(f"{day} {slot}: " +
                   ("실행 가능" if due else f"실행하지 않음 ({reason})"))
             return 0
 
@@ -179,7 +192,7 @@ def run_slot(slot: str, *, dry_run: bool = False, now: datetime | None = None,
         log_dir = home / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
         log_path = log_dir / f"{day}_{slot}.log"
-        print(f"{day} {slot}: 검색→검증→편집→예약 업로드 시작 · 로그: {log_path}")
+        report(f"{day} {slot}: 검색→검증→편집→예약 업로드 시작 · 로그: {log_path}")
         with log_path.open("a", encoding="utf-8") as log:
             for action in ("reserve", "run"):
                 result = subprocess.run(
@@ -189,9 +202,9 @@ def run_slot(slot: str, *, dry_run: bool = False, now: datetime | None = None,
                 )
                 log.flush()
                 if result.returncode:
-                    print(f"{day} {slot}: {action} 실패 ({result.returncode}). 로그를 확인하세요.")
+                    report(f"{day} {slot}: {action} 실패 ({result.returncode}). 로그를 확인하세요.")
                     return result.returncode
-        print(f"{day} {slot}: YouTube 예약 등록 작업 종료")
+        report(f"{day} {slot}: YouTube 예약 등록 작업 종료")
         return 0
 
 
@@ -204,7 +217,7 @@ def main() -> int:
     try:
         return run_slot(args.slot, dry_run=args.dry_run)
     except (SetupError, ValueError, OSError, subprocess.SubprocessError) as exc:
-        print("Shorts Windows 자동화 중단: " + str(exc), file=sys.stderr)
+        report("Shorts Windows 자동화 중단: " + str(exc), stream=sys.stderr)
         return 1
 
 
