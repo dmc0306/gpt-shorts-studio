@@ -7,3 +7,4 @@ yt-dlp>=2025.9
 Pillow>=11,<13
 pytesseract>=0.3.13,<1
 regex>=2024.11
+tzdata>=2025.2
