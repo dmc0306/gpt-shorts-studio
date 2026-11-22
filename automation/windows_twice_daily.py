@@ -135,7 +135,9 @@ def run_slot(slot: str, *, dry_run: bool = False, now: datetime | None = None,
     if current.tzinfo is None:
         raise SetupError("현재 시각에 타임존이 필요합니다.")
 
-    with exclusive_lock(home / "state" / "scheduler.lock") as acquired:
+    # Dry-run must be read-only, including no lock-file creation.
+    guard = contextlib.nullcontext(True) if dry_run else exclusive_lock(home / "state" / "scheduler.lock")
+    with guard as acquired:
         if not acquired:
             print("다른 Shorts 제작 작업이 진행 중이므로 중복 실행하지 않습니다.")
             return 0
