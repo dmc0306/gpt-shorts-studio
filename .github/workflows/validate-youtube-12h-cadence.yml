@@ -1,0 +1,38 @@
+name: Validate Android 12-hour YouTube publish cadence
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tool/patch_youtube_12h_cadence.py'
+      - 'tool/youtube_publish_plan.dart'
+      - 'tool/youtube_schedule_tests.dart'
+      - '.github/workflows/validate-youtube-12h-cadence.yml'
+permissions: {contents: read}
+jobs:
+  app:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply only the Android publish-cadence change to a test copy
+        run: |
+          python3 tool/patch_youtube_12h_cadence.py
+          unzip -q shorts-studio-source.zip -d app
+          grep -q "supportedHours=\[12,24,48,72,168\]" app/lib/youtube_publish_plan.dart
+          grep -q "DropdownMenuItem(value:12" app/lib/youtube_settings.dart
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: subosito/flutter-action@v2
+        with: {channel: stable, cache: true}
+      - name: Bootstrap Android application
+        working-directory: app
+        run: python3 tool/bootstrap.py
+      - name: Analyze existing application
+        working-directory: app
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Test all application regressions including 12-hour publish
+        working-directory: app
+        run: flutter test
+      - name: Build app with new Settings option
+        working-directory: app
+        run: flutter build apk --debug
