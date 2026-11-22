@@ -43,6 +43,42 @@ void main(){
     expect(tooClose,DateTime(2026,11,6,18));
   });
 
+  test('12-hour public cadence previews 09:00 and 21:00 each day',(){
+    final preview=YouTubeCadence.previews(
+      now:DateTime(2026,11,22,7,0),
+      intervalHours:12,hour:9,minute:0,count:5,
+    ).map((e)=>e.toLocal()).toList();
+    expect(preview,[
+      DateTime(2026,11,22,9),
+      DateTime(2026,11,22,21),
+      DateTime(2026,11,23,9),
+      DateTime(2026,11,23,21),
+      DateTime(2026,11,24,9),
+    ]);
+    expect(YouTubeCadence.label(12),'하루 2회 (12시간 간격)');
+    final tooLate=YouTubeCadence.nextUtc(
+      now:DateTime(2026,11,22,8,30),
+      intervalHours:12,hour:9,minute:0).toLocal();
+    expect(tooLate,DateTime(2026,11,22,21));
+  });
+
+  test('Saved cadenceHours=12 survives preferences decoding',(){
+    const channel='UCaaaaaaaaaaaaaaaaaaaaaa';
+    final prefs=YouTubePreferences.fromJson({
+      'channelId':channel,
+      'publishMode':'scheduled',
+      'publicConsentChannel':channel,
+      'cadenceHours':12,
+      'publishHour':9,
+    });
+    expect(prefs.cadenceHours,12);
+    expect(prefs.toJson()['cadenceHours'],12);
+    expect(YouTubeCadence.previews(
+      now:DateTime(2026,11,22,8),
+      intervalHours:prefs.cadenceHours,
+      hour:prefs.publishHour,minute:prefs.publishMinute,count:2).length,2);
+  });
+
   test('Legacy settings stay private; public auto upload requires same-channel consent',(){
     const channelId='UCaaaaaaaaaaaaaaaaaaaaaa';
     final old=YouTubePreferences.fromJson({
