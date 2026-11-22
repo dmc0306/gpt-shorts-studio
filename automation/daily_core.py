@@ -99,13 +99,7 @@ def next_publish_at(config: dict, now: datetime) -> datetime | None:
     local = now_local(now, config)
     hour, minute = parse_clock(config["publish_time"])
     target = local.replace(hour=hour, minute=minute, second=0, microsecond=0)
-    # Two-slot Windows publishing must never silently spill a missed 09/21
-    # deadline into tomorrow. Fail instead, preserving the slot record.
-    if config.get("same_day_publish_required"):
-        if target <= local + timedelta(hours=2):
-            raise SetupError("예약 공개까지 2시간 이상 남지 않아 이번 슬롯을 중단합니다.")
-        return target.astimezone(timezone.utc)
-    # Legacy once-daily scheduler keeps its previously documented rollover.
+    # Allow upload, YouTube processing and channel verification.
     while target <= local + timedelta(hours=2):
         target += timedelta(days=1)
     return target.astimezone(timezone.utc)
