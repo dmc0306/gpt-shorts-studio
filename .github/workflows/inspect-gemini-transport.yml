@@ -1,0 +1,23 @@
+name: Inspect Gemini HTTP transport
+on:
+  push:
+    branches: [fix/gemini-503-retry-diagnostics]
+    paths: ['.github/workflows/inspect-gemini-transport.yml']
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python3 - <<'PY'
+          import zipfile
+          z=zipfile.ZipFile('shorts-studio-source.zip')
+          for n in z.namelist():
+              if n.startswith('lib/') and n.endswith('.dart'):
+                  s=z.read(n).decode()
+                  if n in ('lib/ai.dart','lib/ai_http.dart') or 'GEMINI_HTTP_' in s or 'generativelanguage.googleapis.com' in s:
+                      print('=== SOURCE',n)
+                      lines=s.splitlines()
+                      for i,l in enumerate(lines): print(f'{i+1}: {l}')
+          PY
