@@ -9,7 +9,7 @@ tmp=src.with_suffix(".queue-refill.tmp")
 with ZipFile(src) as z: entries=[(i,z.read(i)) for i in z.infolist()]
 files={i.filename:b for i,b in entries}
 updates={}
-def get(p):return updates.get(p,files[p]).decode()
+def get(p):return updates.get(p,files[p]).decode().replace("\r\n","\n")
 def put(p,s):updates[p]=s.encode()
 def rep(p,a,b):
     s=get(p)
