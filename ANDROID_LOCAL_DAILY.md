@@ -57,3 +57,12 @@
 - WorkManager periodic work: https://developer.android.com/reference/androidx/work/PeriodicWorkRequest
 - Long-running WorkManager workers: https://developer.android.com/develop/background-work/background-tasks/persistent/how-to/long-running
 - Foreground service timeout: https://developer.android.com/develop/background-work/services/fgs/timeout
+
+## 예약 영상 소진 시 자동 보충 모드 (v0.21.30 예정)
+
+- 기존 일일 제작 모드와 별도로 휴대폰 자동 제작 예약 화면에서 선택합니다. 자동 보충은 기본적으로 꺼져 있습니다. YouTube 채널을 Chrome으로 연결·확인하고, 주기별 예약 공개 및 완성 MP4 자동 업로드를 활성화한 다음 재사용 허가 계정과 권리 동의를 설정합니다.
+- WorkManager가 약 30분 간격으로 인증된 채널의 실제 업로드 목록을 조회합니다. private 상태의 미래 publishAt 또는 아직 처리 중인 예약이 남아 있으면 제작하지 않습니다. 채널이나 목록이 불확실하면 자동 업로드하지 않습니다.
+- 예약이 없을 때 최대 5개(후보 검사 최대 20개)를 제작하고 기존 공개 주기에 따라 예약합니다. 업로드 응답뿐 아니라 실제 예약 상태도 조회해 검증합니다. 후보 부족, API 제한, 오류에 따라 0~5개가 생성됩니다.
+- 미완료 전송은 저장 영상과 채널에 연결해 기록합니다. 동일 영상의 저장된 세션을 확인하고 이어 올리며, 결과가 불명확하거나 예약 없이 비공개인 경우 새 업로드를 보류합니다.
+- 새 모드는 앱이 완전히 닫히거나 라이브러리 홈이 유휴 상태에서 백그라운드로 전환됐을 때 실행합니다. 앱을 다시 열면 진행 작업 종료를 기다리거나 자동 보충 중지 및 끄기를 선택할 수 있습니다. 앱이 강제 중지되거나 Android 절전으로 제한되면 동작하지 않을 수 있습니다. 첫 예약이 소진된 뒤 새 제작과 최소 예약 준비 시간 때문에 공개 공백이 생길 수 있습니다.
+- 별도 PC/서버는 필요하지 않습니다. 실제 채널의 예약 목록 조회 및 휴대폰 무인 업로드는 실기기 검증이 필요합니다.
