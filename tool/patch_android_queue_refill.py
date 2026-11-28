@@ -160,7 +160,7 @@ rep(p,'                    call.argument<Boolean>("rights")==true))','          
 rep(p,"worker.shutdown();super.onDestroy()}","worker.shutdown();releaseQueueUi();super.onDestroy()}")
 
 p="lib/main.dart"
-rep(p,"  Future<void> init()async{\n   try{clips=await Native.load();","""  bool queueParked=false,queueWaiting=false;
+rep(p," Future<void> init()async{\n  try{clips=await Native.load();","""  bool queueParked=false,queueWaiting=false;
   Future<void> lifecycle=Future.value();
   Future<void> waitForQueue()async{
    while(mounted&&(await Native.call<bool>('queueWorkerActive')??false)){
