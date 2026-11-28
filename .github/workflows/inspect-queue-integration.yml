@@ -13,16 +13,14 @@ jobs:
           python3 - <<'PY'
           import zipfile
           z=zipfile.ZipFile('shorts-studio-source.zip')
-          for n in ['pubspec.yaml','lib/youtube.dart','lib/youtube_channel.dart','lib/youtube_chrome.dart','lib/youtube_upload.dart','lib/daily_headless_runner.dart','lib/daily_local_settings.dart','native/android/AndroidDailyScheduler.kt','native/android/AndroidHeadlessDailyRunner.kt','native/android/HeadlessDailyMedia.kt','native/android/MainActivity.kt','lib/main.dart','lib/youtube_settings.dart','lib/auto_batch.dart']:
-              s=z.read(n).decode()
+          for n in ['lib/main.dart','lib/bridge.dart','lib/model.dart','native/android/MainActivity.kt','native/android/HeadlessDailyMedia.kt','lib/youtube_settings.dart','lib/auto_batch.dart']:
               print('=== SOURCE',n)
-              lines=s.splitlines()
-              if n in ['native/android/MainActivity.kt','lib/main.dart','lib/youtube_settings.dart','lib/auto_batch.dart','native/android/HeadlessDailyMedia.kt']:
-                  terms=['dailySchedule','dailyHeadless','dailyRun','onCreate','onResume','loadProjects','saveProjects','youtubeSettings','youtubeChrome','dailyUpload','reserveDaily','uploadClip','onSave','automatic','권한','휴대폰 백그라운드','uploading','batchStart','batchFinish']
+              lines=z.read(n).decode().splitlines()
+              if n in ('native/android/MainActivity.kt','native/android/HeadlessDailyMedia.kt'):
                   picked=set()
                   for i,l in enumerate(lines):
-                      if any(t in l for t in terms):
-                          picked.update(range(max(0,i-4),min(len(lines),i+8)))
+                      if i<115 or any(t in l for t in ['loadProjects','saveProjects','youtubeSettings','saveYoutubeSettings','onDestroy','batchStart','batchFinish','batchAwake','youtubeKeepAwake','youtubeUploadState','saveYoutubeUploadState','reserveDailySource','dailyUploadSuccess','pendingSourceId','dailyHistory']):
+                          picked.update(range(max(0,i-5),min(len(lines),i+10)))
                   for i in sorted(picked): print(f'{i+1}: {lines[i]}')
               else:
                   for i,l in enumerate(lines): print(f'{i+1}: {l}')
