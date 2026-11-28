@@ -59,6 +59,16 @@ void main(){
     final client=MockClient((r)async=>json({'items':[video('a',{'privacyStatus':'private'})]}));
     expect(await YouTubeScheduledQueue(client,'test',channel).verifyScheduled('a',now),false);
   });
+  test('only an actually public overdue upload can settle pending state',()async{
+    final client=MockClient((r)async=>json({'items':[video('a',{'privacyStatus':'public'})]}));
+    final reader=YouTubeScheduledQueue(client,'test',channel);
+    expect(await reader.verifyPublished('a',now,DateTime.utc(2026,11,27)),true);
+    expect(await reader.verifyPublished('a',now,DateTime.utc(2026,11,29)),false);
+    expect(await reader.verifyPublished('a',now,null),false);
+    final privateClient=MockClient((r)async=>json({'items':[video('a',{'privacyStatus':'private'})]}));
+    expect(await YouTubeScheduledQueue(privateClient,'test',channel)
+      .verifyPublished('a',now,DateTime.utc(2026,11,27)),false);
+  });
   test('overdue private scheduled video still blocks auto refill conservatively',()async{
     final client=MockClient((r)async{
       if(r.url.path.endsWith('/channels'))return json(owned());
