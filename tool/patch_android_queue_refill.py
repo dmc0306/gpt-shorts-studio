@@ -41,6 +41,8 @@ rep(p,"  Future<Map<String, dynamic>> state(String uri) async {", """  Future<vo
     (q)=>q.hasScheduled(DateTime.now()));
   Future<bool> verifyScheduledQueue(String id)=>_withScheduledQueue(
     (q)=>q.verifyScheduled(id,DateTime.now()));
+  Future<bool> verifyPublishedQueue(String id,DateTime? intended)=>_withScheduledQueue(
+    (q)=>q.verifyPublished(id,DateTime.now(),intended));
 
   Future<Map<String, dynamic>> state(String uri) async {""")
 
@@ -251,22 +253,34 @@ rep(p,"      final state=await Native.call<Map<dynamic,dynamic>>('loadDailyHisto
           if(pending==null)throw const YouTubeFailure('이전 자동 업로드의 저장 영상이 없어 확인이 필요합니다.');
           final pendingState=await youtube.state(pendingUri);
           if(pendingState['videoId'] is String){
+            final id=pendingState['videoId'] as String;
+            final reserved=await youtube.verifyScheduledQueue(id);
+            final intended=DateTime.tryParse(pendingState['publishAt'] as String? ?? '');
+            if(!reserved&&!await youtube.verifyPublishedQueue(id,intended)){
+              throw const YouTubeFailure('이전 영상의 실제 예약·공개 상태 확인이 필요합니다. 추가 업로드를 보류합니다.');
+            }
             await Native.call('dailyUploadSuccess',{
-              'sourceId':state['pendingSourceId'],'youtubeVideoId':pendingState['videoId'],
+              'sourceId':state['pendingSourceId'],'youtubeVideoId':id,
             });
+            if(reserved){
+              skipped=true;success=true;reason='이전 영상 예약 확인 · 새 제작 건너뜀';return;
+            }
           }else if(!hasScheduled){
             await step('이전 미완료 업로드 확인·이어 올리기');
             uploadStarted=true;
             final id=await youtube.uploadClip(pending);
             if(id.isEmpty)throw const YouTubeFailure('이전 업로드 결과를 확인하지 못했어요.');
+            final resumedState=await youtube.state(pendingUri);
+            final intended=DateTime.tryParse(resumedState['publishAt'] as String? ?? '');
+            final reserved=await youtube.verifyScheduledQueue(id);
+            if(!reserved&&!await youtube.verifyPublishedQueue(id,intended)){
+              throw const YouTubeFailure('YouTube 예약 등록을 확인하지 못했어요. 추가 업로드를 보류합니다.');
+            }
             await Native.call('dailyUploadSuccess',{
               'sourceId':state['pendingSourceId'],'youtubeVideoId':id,
             });
-            if(!await youtube.verifyScheduledQueue(id)){
-              throw const YouTubeFailure('YouTube 예약 등록을 확인하지 못했어요. 추가 업로드를 보류합니다.');
-            }
             uploadStarted=false;
-            uploaded=1;
+            uploaded=reserved?1:0;
           }else{
             skipped=true;success=true;reason='예약 영상 있음 · 이전 미완료 전송은 보류';return;
           }
@@ -318,10 +332,13 @@ rep(p,"              await step('확인된 YouTube 채널로 완성 MP4 업로�
               }
               uploadStarted=true;
               final videoId=await youtube.uploadClip(current);""")
-rep(p,"              success=true;\n              reason='영상 1개 업로드 접수 · YouTube ID $videoId';\n              break;\n            }catch(_){\n              await step('검증 또는 제작 실패 · 후보 제외');","""              if(queueMode&&!await youtube.verifyScheduledQueue(videoId)){
+rep(p,"              await Native.call('dailyUploadSuccess',{\n                'sourceId':id,'youtubeVideoId':videoId,\n              });","""              if(queueMode&&!await youtube.verifyScheduledQueue(videoId)){
                 throw const YouTubeFailure('YouTube 예약 등록을 확인하지 못했어요. 추가 업로드를 보류합니다.');
               }
-              uploadStarted=false;
+              await Native.call('dailyUploadSuccess',{
+                'sourceId':id,'youtubeVideoId':videoId,
+              });""")
+rep(p,"              success=true;\n              reason='영상 1개 업로드 접수 · YouTube ID $videoId';\n              break;\n            }catch(_){\n              await step('검증 또는 제작 실패 · 후보 제외');","""              uploadStarted=false;
               uploaded++;success=true;
               reason='영상 $uploaded개 예약 업로드 접수';
               if(uploaded>=target)break;
