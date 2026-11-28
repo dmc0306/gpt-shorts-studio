@@ -81,13 +81,24 @@ class YouTubeScheduledQueue {
     _unknown();
   }
 
-  /// Verify each new upload is visible on the exact channel and really scheduled.
-  Future<bool> verifyScheduled(String id,DateTime now)async{
+  Future<Map> _videoStatus(String id)async{
     final data=await _get('videos',{'part':'status,snippet','id':id});
     final items=data['items'] as List;
     if(items.length!=1||items.first is! Map||items.first['id']!=id||
        items.first['snippet'] is! Map||items.first['snippet']['channelId']!=channelId||
        items.first['status'] is! Map)_unknown();
-    return isScheduled(items.first['status'] as Map,now);
+    return items.first['status'] as Map;
+  }
+
+  /// A successful upload is not a confirmed reservation until YouTube says so.
+  Future<bool> verifyScheduled(String id,DateTime now)async=>
+    isScheduled(await _videoStatus(id),now);
+
+  /// A pending upload may have become public while the app was stopped.
+  Future<bool> verifyPublished(String id,DateTime now,DateTime? intended)async{
+    if(intended==null||intended.isAfter(now))return false;
+    final status=await _videoStatus(id);
+    return status['privacyStatus']=='public'&&
+      !['failed','rejected','deleted'].contains(status['uploadStatus']);
   }
 }
